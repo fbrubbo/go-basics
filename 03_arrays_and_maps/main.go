@@ -15,10 +15,18 @@ func main() {
 	// Slices
 	slice := []string{"Apple", "Orange", "asfd"}
 	slice[0] = "asdf"
+	slice = append(slice, "234", "345", "567", "456")
 	fmt.Println(slice)
 	fmt.Println(len(slice))
 	fmt.Println(contains(slice, "Orange"))
 	fmt.Println(contains(slice, "123"))
+	printSlice(slice)
+	s := slice[1:4]
+	fmt.Println(s)
+	s = slice[:2]
+	fmt.Println(s)
+	s = slice[3:]
+	fmt.Println(s)
 
 	// Maps
 	emails := make(map[string]string) // analog to new
@@ -40,17 +48,37 @@ func main() {
 		fmt.Printf("Value: %s\n", v)
 	}
 
-	// Others
-	color := "red"
-	switch color {
-	case "red":
-		fmt.Println("red")
-	case "blue":
-		fmt.Println("blue")
-	default:
-		fmt.Println("default")
+	// while
+	i := 0
+	for i < 10 {
+		fmt.Println(i)
+		i++
+	}
+
+	// while true
+	x := 5
+	for {
+		fmt.Println("Do stuff.", x)
+		x += 3
+		if x > 25 {
+			break
+		}
 	}
 }
+func printSlice(s []string) {
+	fmt.Printf("len=%d cap=%d %s\n", len(s), cap(s), s)
+}
+
+// // Others
+// color := "red"
+// switch color {
+// case "red":
+// 	fmt.Println("red")
+// case "blue":
+// 	fmt.Println("blue")
+// default:
+// 	fmt.Println("default")
+// }
 
 // There is not bult in exist method.. crap
 func contains(list []string, el string) bool {
