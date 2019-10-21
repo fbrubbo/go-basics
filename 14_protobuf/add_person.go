@@ -3,7 +3,7 @@ package main
 /**
 install protoc: https://developers.google.com/protocol-buffers/docs/downloads.html
 install go plugin: go get -u github.com/golang/protobuf/protoc-gen-go
-	Make sure the plugin is in the PATH
+	Make sure the plugin is in the PATH. Usually they are t ~/go/bin
 protoc -I=./ --go_out=./gen addressbook.proto
 
 */
