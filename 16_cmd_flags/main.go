@@ -7,11 +7,13 @@ import (
 	"os/exec"
 )
 
+// Resource struct
 type Resource struct {
-	Cpu    string
+	CPU    string
 	Memory string
 }
 
+// Resources struct
 type Resources struct {
 	Containers []struct {
 		Resources struct {
@@ -45,5 +47,5 @@ func main() {
 	if err2 != nil {
 		fmt.Println(err2.Error())
 	}
-	fmt.Printf("Operation: %s", res)
+	fmt.Printf("go struct: %+v\n", res)
 }
