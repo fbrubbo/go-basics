@@ -23,6 +23,13 @@ type Container struct {
 	Memory string
 }
 
+// GetDeploymentName should work for most of the cases
+func (t Top) GetDeploymentName() string {
+	reg, _ := regexp.Compile(`(.*)-([^-]*)-([^-]*)`)
+	result := reg.FindStringSubmatch(t.Pod)
+	return result[1]
+}
+
 // GetMilliCPU total pod cpu
 func (t Top) GetMilliCPU() int {
 	total := 0
