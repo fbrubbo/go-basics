@@ -5,16 +5,16 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "16_cmd_flags",
+            "name": "16_kubectl_plugin",
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/16_cmd_flags",
+            "program": "${workspaceFolder}/16_kubectl_plugin",
             "env": {},
-            "args": ["-d", "shippingservice", "-n", "default"]
+            //"args": ["-d", "shippingservice", "-n", "default"]
             //"args": ["-p", "shippingservice-545f46fb7f-f4c5b", "-n", "default"]
             //"args": ["-n", "default"]
-            //"args": ["-all-namespaces"]
+            "args": ["-all-namespaces"]
         }
     ]
 }

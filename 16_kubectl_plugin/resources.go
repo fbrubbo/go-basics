@@ -20,6 +20,7 @@ type PodList struct {
 type Pod struct {
 	Metadata Metadata
 	Spec     Spec
+	Top      Top
 }
 
 // Metadata struct
@@ -61,9 +62,9 @@ func (r Resource) GetMilliCPU() int {
 // GetMiMemory returns the memory in Mi
 func (r Resource) GetMiMemory() int {
 	reg, _ := regexp.Compile(`(\d*)(.*)`)
-	result := reg.FindStringSubmatch(r.Memory)
-	memory, _ := strconv.Atoi(result[1])
-	suffix := result[2]
+	groups := reg.FindStringSubmatch(r.Memory)
+	memory, _ := strconv.Atoi(groups[1])
+	suffix := groups[2]
 
 	switch suffix {
 	case "G":
@@ -93,44 +94,74 @@ func (r Resource) GetMiMemory() int {
 	*/
 }
 
+// GetPodKey returns <namespace>-<pod name>
+func (p Pod) GetPodKey() string {
+	return p.Metadata.Namespace + "-" + p.Metadata.Name
+}
+
+// GetDeploymentdKey returns <namespace>-<pod name>
+func (p Pod) GetDeploymentdKey() string {
+	return p.Metadata.Namespace + "-" + p.GetDeploymentName()
+}
+
 // GetDeploymentName should work for most of the cases
-func (pr Pod) GetDeploymentName() string {
+func (p Pod) GetDeploymentName() string {
 	reg, _ := regexp.Compile(`(.*)-([^-]*)-([^-]*)`)
-	result := reg.FindStringSubmatch(pr.Metadata.Name)
+	result := reg.FindStringSubmatch(p.Metadata.Name)
 	return result[1]
 }
 
 // GetRequestsMilliCPU total
-func (pr Pod) GetRequestsMilliCPU() int {
+func (p Pod) GetRequestsMilliCPU() int {
 	total := 0
-	for _, c := range pr.Spec.Containers {
+	for _, c := range p.Spec.Containers {
 		total += c.Resources.Requests.GetMilliCPU()
 	}
 	return total
 }
 
+// GetTopMilliCPU total
+func (p Pod) GetTopMilliCPU() int {
+	return p.Top.GetMilliCPU()
+}
+
+// GetUsageCPU %
+func (p Pod) GetUsageCPU() float32 {
+	return float32(p.GetTopMilliCPU()) / float32(p.GetRequestsMilliCPU()) * 100
+}
+
 // GetRequestsMiMemory total
-func (pr Pod) GetRequestsMiMemory() int {
+func (p Pod) GetRequestsMiMemory() int {
 	total := 0
-	for _, c := range pr.Spec.Containers {
+	for _, c := range p.Spec.Containers {
 		total += c.Resources.Requests.GetMiMemory()
 	}
 	return total
 }
 
+// GetTopMiMemory total
+func (p Pod) GetTopMiMemory() int {
+	return p.Top.GetMiMemory()
+}
+
+// GetUsageMemory %
+func (p Pod) GetUsageMemory() float32 {
+	return float32(p.GetTopMiMemory()) / float32(p.GetRequestsMiMemory()) * 100
+}
+
 // GetLimitsMilliCPU total
-func (pr Pod) GetLimitsMilliCPU() int {
+func (p Pod) GetLimitsMilliCPU() int {
 	total := 0
-	for _, c := range pr.Spec.Containers {
+	for _, c := range p.Spec.Containers {
 		total += c.Resources.Limits.GetMilliCPU()
 	}
 	return total
 }
 
 // GetLimitsMiMemory total
-func (pr Pod) GetLimitsMiMemory() int {
+func (p Pod) GetLimitsMiMemory() int {
 	total := 0
-	for _, c := range pr.Spec.Containers {
+	for _, c := range p.Spec.Containers {
 		total += c.Resources.Limits.GetMiMemory()
 	}
 	return total

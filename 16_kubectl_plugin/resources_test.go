@@ -68,7 +68,7 @@ func TestGetDeploymentName(t *testing.T) {
 	}
 }
 
-func TestBuildPod(t *testing.T) {
+func TestBuildOnePod(t *testing.T) {
 	b, err := ioutil.ReadFile("test-data/one-pod.json")
 	if err != nil {
 		fmt.Print(err)
@@ -106,7 +106,7 @@ func TestBuildPod(t *testing.T) {
 	}
 }
 
-func TestBuildPods(t *testing.T) {
+func TestBuildManyPods(t *testing.T) {
 	b, err := ioutil.ReadFile("test-data/many-pods.json")
 	if err != nil {
 		fmt.Print(err)
