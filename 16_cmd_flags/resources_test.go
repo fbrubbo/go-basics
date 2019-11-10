@@ -48,14 +48,46 @@ func TestGetMiMemory(t *testing.T) {
 	}
 }
 
-func TestPodResources(t *testing.T) {
-	b, err := ioutil.ReadFile("test.json")
+func TestGetDeploymentName(t *testing.T) {
+	type testPodResource struct {
+		res      Pod
+		expected string
+	}
+	tests := []testPodResource{
+		testPodResource{res: Pod{Metadata: Metadata{Name: "shippingservice-545f46fb7f-f4c5b"}}, expected: "shippingservice"},
+		testPodResource{res: Pod{Metadata: Metadata{Name: "shipping-service-545f46fb7f-f4c5b"}}, expected: "shipping-service"},
+	}
+
+	log.Infof("%+v", tests)
+
+	for i, test := range tests {
+		log.Infof("test info %d -> %+v", i, test)
+		if result := test.res.GetDeploymentName(); result != test.expected {
+			t.Fatalf("Test failed! %s but expected %s", result, test.expected)
+		}
+	}
+}
+
+func TestBuildPod(t *testing.T) {
+	b, err := ioutil.ReadFile("test-data/one-pod.json")
 	if err != nil {
 		fmt.Print(err)
 	}
 	str := string(b)
-	pr := GetResources(str)
+	pr := buildPodList(str).Items[0]
 
+	ex := "shippingservice-545f46fb7f-f4c5b"
+	if re := pr.Metadata.Name; re != ex {
+		t.Fatalf("Test failed! %s but expected %s", re, ex)
+	}
+	ex = "shippingservice"
+	if re := pr.GetDeploymentName(); re != ex {
+		t.Fatalf("Test failed! %s but expected %s", re, ex)
+	}
+	ex = "gke-central-pool-1-47d730e3-sh01"
+	if re := pr.Spec.NodeName; re != ex {
+		t.Fatalf("Test failed! %s but expected %s", re, ex)
+	}
 	expected := 200
 	if result := pr.GetRequestsMilliCPU(); result != expected {
 		t.Fatalf("Test failed! %d but expected %d", result, expected)
@@ -71,5 +103,44 @@ func TestPodResources(t *testing.T) {
 	expected = 256
 	if result := pr.GetLimitsMiMemory(); result != expected {
 		t.Fatalf("Test failed! %d but expected %d", result, expected)
+	}
+}
+
+func TestBuildPods(t *testing.T) {
+	b, err := ioutil.ReadFile("test-data/many-pods.json")
+	if err != nil {
+		fmt.Print(err)
+	}
+	str := string(b)
+	items := buildPodList(str).Items
+
+	ex := 23
+	if l := len(items); l != ex {
+		t.Fatalf("Test failed! found %d expected %d", l, ex)
+	}
+	for _, pod := range items {
+		if &pod.Metadata.Name == nil || pod.Metadata.Name == "" {
+			t.Fatalf("Test failed! Name should not be empty")
+		}
+	}
+}
+
+func TestBuildKubectlCmd(t *testing.T) {
+	type testCmd struct {
+		ns       string
+		expected string
+	}
+	tests := []testCmd{
+		testCmd{ns: "test", expected: "kubectl get pods -n test -o json"},
+		testCmd{ns: "", expected: "kubectl get pods --all-namespaces -o json"},
+	}
+
+	log.Infof("%+v", tests)
+
+	for i, test := range tests {
+		log.Infof("test info %d -> %+v", i, test)
+		if result := buildKubectlCmd(test.ns); result != test.expected {
+			t.Fatalf("Test failed! %s but expected %s", result, test.expected)
+		}
 	}
 }

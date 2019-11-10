@@ -11,6 +11,35 @@ import (
 	"strings"
 )
 
+// PodList struct
+type PodList struct {
+	Items []Pod
+}
+
+// Pod struct
+type Pod struct {
+	Metadata Metadata
+	Spec     Spec
+}
+
+// Metadata struct
+type Metadata struct {
+	Name      string
+	Namespace string
+}
+
+// Spec struct
+type Spec struct {
+	NodeName   string
+	Containers []struct {
+		Name      string
+		Resources struct {
+			Requests Resource
+			Limits   Resource
+		}
+	}
+}
+
 // Resource struct
 type Resource struct {
 	CPU    string
@@ -64,24 +93,15 @@ func (r Resource) GetMiMemory() int {
 	*/
 }
 
-// PodResources struct
-type PodResources struct {
-	Metadata struct {
-		Name string
-	}
-	Spec struct {
-		NodeName   string
-		Containers []struct {
-			Resources struct {
-				Requests Resource
-				Limits   Resource
-			}
-		}
-	}
+// GetDeploymentName should work for most of the cases
+func (pr Pod) GetDeploymentName() string {
+	reg, _ := regexp.Compile(`(.*)-([^-]*)-([^-]*)`)
+	result := reg.FindStringSubmatch(pr.Metadata.Name)
+	return result[1]
 }
 
 // GetRequestsMilliCPU total
-func (pr PodResources) GetRequestsMilliCPU() int {
+func (pr Pod) GetRequestsMilliCPU() int {
 	total := 0
 	for _, c := range pr.Spec.Containers {
 		total += c.Resources.Requests.GetMilliCPU()
@@ -90,7 +110,7 @@ func (pr PodResources) GetRequestsMilliCPU() int {
 }
 
 // GetRequestsMiMemory total
-func (pr PodResources) GetRequestsMiMemory() int {
+func (pr Pod) GetRequestsMiMemory() int {
 	total := 0
 	for _, c := range pr.Spec.Containers {
 		total += c.Resources.Requests.GetMiMemory()
@@ -99,7 +119,7 @@ func (pr PodResources) GetRequestsMiMemory() int {
 }
 
 // GetLimitsMilliCPU total
-func (pr PodResources) GetLimitsMilliCPU() int {
+func (pr Pod) GetLimitsMilliCPU() int {
 	total := 0
 	for _, c := range pr.Spec.Containers {
 		total += c.Resources.Limits.GetMilliCPU()
@@ -108,7 +128,7 @@ func (pr PodResources) GetLimitsMilliCPU() int {
 }
 
 // GetLimitsMiMemory total
-func (pr PodResources) GetLimitsMiMemory() int {
+func (pr Pod) GetLimitsMiMemory() int {
 	total := 0
 	for _, c := range pr.Spec.Containers {
 		total += c.Resources.Limits.GetMiMemory()
@@ -116,24 +136,31 @@ func (pr PodResources) GetLimitsMiMemory() int {
 	return total
 }
 
-// GetPodResources executes kubectl get pod command
-func GetPodResources(name string, ns string) []PodResources {
-	cmd := fmt.Sprintf("kubectl get pod %s -n %s -o json", name, ns)
+// RetrievePods executes kubectl get pods command
+// if ns is empty, then all namespaces are used
+func RetrievePods(ns string) []Pod {
+	cmd := buildKubectlCmd(ns)
 	out, err := exec.Command("bash", "-c", cmd).CombinedOutput()
 	if err != nil {
 		log.Fatalf("Failed to execute command: %s", cmd)
 	}
 	json := string(out)
-	fmt.Printf("JSON:\n%s\n", json)
-	return GetResources(json)
+	return buildPodList(json).Items
 }
 
-// GetResources based on a json string
-func GetResources(str string) PodResources {
-	pod := PodResources{}
-	err2 := json.Unmarshal([]byte(str), &pod)
+func buildKubectlCmd(ns string) string {
+	cmd := fmt.Sprintf("kubectl get pods --all-namespaces -o json")
+	if ns != "" {
+		cmd = fmt.Sprintf("kubectl get pods -n %s -o json", ns)
+	}
+	return cmd
+}
+
+func buildPodList(str string) PodList {
+	pods := PodList{}
+	err2 := json.Unmarshal([]byte(str), &pods)
 	if err2 != nil {
 		fmt.Println(err2.Error())
 	}
-	return pod
+	return pods
 }
