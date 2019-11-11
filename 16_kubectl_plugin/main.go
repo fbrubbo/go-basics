@@ -41,13 +41,12 @@ func main() {
 
 	if *o == "tab" {
 		printPodsTab(result)
+		printNodesTag(result, *debug)
 	} else if *o == "csv" {
 		fmt.Println("Output csv not implemented!")
 	} else {
 		fmt.Println("Output (-o) parameter is invalid!")
 	}
-
-	printNodesTag(result, *debug)
 }
 
 func printNodesTag(result Wrapper, debug bool) {
@@ -163,6 +162,11 @@ func (d Wrapper) GetUsageCPU() float32 {
 		requests += p.GetRequestsMilliCPU()
 		top += p.Top.GetMilliCPU()
 	}
+	if top == 0 {
+		return float32(0)
+	} else if requests == 0 {
+		return float32(100)
+	}
 	return float32(top) / float32(requests) * 100
 }
 
@@ -190,6 +194,11 @@ func (d Wrapper) GetUsageMemory() float32 {
 	for _, p := range d.Pods {
 		requests += p.GetRequestsMiMemory()
 		top += p.Top.GetMiMemory()
+	}
+	if top == 0 {
+		return float32(0)
+	} else if requests == 0 {
+		return float32(100)
 	}
 	return float32(top) / float32(requests) * 100
 }

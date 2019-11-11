@@ -7,7 +7,7 @@ import (
 )
 
 func TestBuildManyPodTop(t *testing.T) {
-	b, err := ioutil.ReadFile("test-data/top-many-pods.json")
+	b, err := ioutil.ReadFile("test-data/top-many-pods.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestBuildManyPodTop(t *testing.T) {
 }
 
 func TestBuildPodTopDefaultNamespace(t *testing.T) {
-	b, err := ioutil.ReadFile("test-data/top-many-pods.json")
+	b, err := ioutil.ReadFile("test-data/top-many-pods.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestBuildPodTopDefaultNamespace(t *testing.T) {
 }
 
 func TestBuildOnePodTop(t *testing.T) {
-	b, err := ioutil.ReadFile("test-data/top-one-pod.json")
+	b, err := ioutil.ReadFile("test-data/top-one-pod.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
