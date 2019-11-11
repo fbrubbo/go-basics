@@ -176,7 +176,20 @@ func RetrievePods(ns string) []Pod {
 		log.Fatalf("Failed to execute command: %s", cmd)
 	}
 	json := string(out)
-	return buildPodList(json).Items
+	pods := buildPodList(json).Items
+	return enrichPodsWithTopInfo(pods, ns)
+}
+
+func enrichPodsWithTopInfo(pods []Pod, ns string) []Pod {
+	var podList []Pod
+	topMap := RetrieveTopMap(ns)
+	for _, pod := range pods {
+		if top, ok := topMap[pod.GetPodKey()]; ok {
+			pod.Top = top
+		}
+		podList = append(podList, pod)
+	}
+	return podList
 }
 
 func buildKubectlCmd(ns string) string {
