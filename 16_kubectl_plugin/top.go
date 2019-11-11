@@ -84,7 +84,7 @@ func buildTopMap(data string, nsFilter string) map[string]Top {
 		groups := reg.FindStringSubmatch(scanner.Text())
 		mamespace := groups[1]
 		if nsFilter == "" || nsFilter == mamespace {
-			key := mamespace + "-" + groups[2]
+			key := mamespace + "|" + groups[2]
 			val, ok := top[key]
 			if !ok {
 				val = Top{

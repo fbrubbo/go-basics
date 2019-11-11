@@ -4,72 +4,123 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"text/tabwriter"
 )
 
 const version = "0.1.0"
 
 func main() {
-	p := flag.String("p", "", "Filter by the pod name (default:empty - means all pods)")
-	d := flag.String("d", "", "Filter by the deployment name (default:empty - means all deployments)")
-	n := flag.String("n", "default", "Filter by namespace name (default: default)")
-	o := flag.String("o", "tab", "Show output as: tab | csv (default: tab)")
+	p := flag.String("p", "", "Filter by the pod name (default:empty means all pods)")
+	d := flag.String("d", "", "Filter by the deployment name (default:empty means all deployments)")
+	n := flag.String("n", "", "Filter by namespace name (default:empty means all namespaces)")
+	o := flag.String("o", "tab", "Show output as: tab | csv")
 	v := flag.Bool("v", false, "Show the plugin version")
 	debug := flag.Bool("debug", false, "Show debug info")
 	// TODO: sort-by ? How to handle the below scenarios?
 	// TOOD: pod count per node + node top
 	// TODO: deployment/replicaset hpa + total resources allocation + total limits (usage and cpu scale is already in the hpa list)
-	allNamespaces := flag.Bool("all-namespaces", false, "No filter at all, returns all pods in all namespaces (default: false)")
 	noHeaders := flag.Bool("no-headers", false, "When true, remove filters")
 	flag.Parse()
-
-	if *debug {
-		fmt.Println("---------------------------------------------")
-		fmt.Println("FLAGS: ")
-		fmt.Println("   -p [POD] is: ", *p)
-		fmt.Println("   -d [DEPLOYMENT] is: ", *d)
-		fmt.Println("   -n [OUTPUT] is: ", *o)
-		fmt.Println("   -o [NAMESPACE] is: ", *n)
-		fmt.Println("   -v [VERSION] is: ", *v)
-		fmt.Println("   -no-headers [NO HEADERS] is: ", *noHeaders)
-		fmt.Println("   -all-namespaces [All NAMESPACE] is: ", *allNamespaces)
-		fmt.Println("---------------------------------------------")
-		fmt.Println()
-	}
+	printFlags(*p, *d, *n, *o, *v, *debug, *noHeaders)
 
 	if *v {
 		fmt.Println("Plugin Version: ", version)
 		os.Exit(0)
 	}
 
-	if *allNamespaces {
-		*n = ""
-	}
-
 	podList := RetrievePods(*n)
 	var result Wrapper
 	if *p != "" {
-		result = buildPod(podList, *p)
+		result = filterPod(podList, *p)
 	} else if *d != "" {
-		result = buildDeployment(podList, *d)
+		result = filterDeployment(podList, *d)
 	} else {
 		result = Wrapper{Type: "All Pods", Pods: podList}
 	}
 
 	if *o == "tab" {
-		printTab(result)
+		printPodsTab(result)
 	} else if *o == "csv" {
 		fmt.Println("Output csv not implemented!")
 	} else {
 		fmt.Println("Output (-o) parameter is invalid!")
 	}
 
+	printNodesTag(result, *debug)
 }
 
-func printTab(result Wrapper) {
+func printNodesTag(result Wrapper, debug bool) {
+	podsInNodes := make(map[string][]Pod)
+	for _, pod := range result.Pods {
+		nodeName := pod.Spec.NodeName
+		if pods, ok := podsInNodes[nodeName]; ok {
+			podsInNodes[nodeName] = append(pods, pod)
+		} else {
+			podsInNodes[nodeName] = []Pod{pod}
+		}
+	}
+	fmt.Println("\n\nNODEs SNAPSHOT:")
 	formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
 	formatValues := "%v\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\n"
-	fmt.Println("PODs SUMMARY:")
+	tw := tabwriter.NewWriter(os.Stdout, 0, 1, 2, ' ', tabwriter.TabIndent)
+	fmt.Fprintf(tw, formatHeader, "Node", "Num Pods In Node", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)")
+	fmt.Fprintf(tw, formatHeader, "----", "----------------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
+	min := 999
+	max := 0
+	total := 0
+	for nodeName, pods := range podsInNodes {
+		nPods := len(pods)
+		total += nPods
+		if nPods > max {
+			max = nPods
+		}
+		if min > nPods {
+			min = nPods
+		}
+		w := Wrapper{Pods: pods}
+		fmt.Fprintf(tw, formatValues, nodeName, nPods, w.GetRequestsMilliCPU(), w.GetTopMilliCPU(), w.GetUsageCPU(), w.GetRequestsMiMemory(), w.GetTopMiMemory(), w.GetUsageMemory(), w.GetLimitsMilliCPU(), w.GetLimitsMiMemory())
+	}
+	avg := total / len(podsInNodes)
+	fmt.Fprintf(tw, formatHeader, " ", "----------------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
+	summary := (strconv.Itoa(min) + "/" + strconv.Itoa(max) + "/" + strconv.Itoa(avg))
+	fmt.Fprintf(tw, formatValues, " ", summary, result.GetRequestsMilliCPU(), result.GetTopMilliCPU(), result.GetUsageCPU(), result.GetRequestsMiMemory(), result.GetTopMiMemory(), result.GetUsageMemory(), result.GetLimitsMilliCPU(), result.GetLimitsMiMemory())
+	tw.Flush()
+
+	if debug {
+		fmt.Println()
+		fmt.Println("---------------------------------------------")
+		fmt.Println("[debug] PODS IN EACH NODE: ")
+		for nodeName, pods := range podsInNodes {
+			fmt.Printf(" - %s\n   [ ", nodeName)
+			for _, pod := range pods {
+				fmt.Printf("%s   ", pod.GetPodKey())
+			}
+			fmt.Println("]")
+		}
+		fmt.Println("---------------------------------------------")
+	}
+}
+
+func printFlags(p string, d string, n string, o string, v bool, debug bool, noHeaders bool) {
+	if debug {
+		fmt.Println("---------------------------------------------")
+		fmt.Println("[debug] FLAGS: ")
+		fmt.Println("   -p [POD] is: ", p)
+		fmt.Println("   -d [DEPLOYMENT] is: ", d)
+		fmt.Println("   -n [OUTPUT] is: ", o)
+		fmt.Println("   -o [NAMESPACE] is: ", n)
+		fmt.Println("   -v [VERSION] is: ", v)
+		fmt.Println("   -no-headers [NO HEADERS] is: ", noHeaders)
+		fmt.Println("---------------------------------------------")
+		fmt.Println()
+	}
+}
+
+func printPodsTab(result Wrapper) {
+	formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
+	formatValues := "%v\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\n"
+	fmt.Println("\nPODs SNAPSHOT:")
 	w := tabwriter.NewWriter(os.Stdout, 0, 1, 2, ' ', tabwriter.TabIndent)
 	fmt.Fprintf(w, formatHeader, "Namespace", "Pod Name", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)")
 	fmt.Fprintf(w, formatHeader, "---------", "--------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
@@ -161,7 +212,7 @@ func (d Wrapper) GetLimitsMiMemory() int {
 	return total
 }
 
-func buildPod(podList []Pod, p string) Wrapper {
+func filterPod(podList []Pod, p string) Wrapper {
 	pods := make(map[string]Pod)
 	for _, pod := range podList {
 		pods[pod.Metadata.Name] = pod
@@ -169,7 +220,7 @@ func buildPod(podList []Pod, p string) Wrapper {
 	return Wrapper{Type: "Pod", Pods: []Pod{pods[p]}}
 }
 
-func buildDeployment(podList []Pod, d string) Wrapper {
+func filterDeployment(podList []Pod, d string) Wrapper {
 	pods := make(map[string][]Pod)
 	for _, pod := range podList {
 		deploymentName := pod.GetDeploymentName()

@@ -96,12 +96,12 @@ func (r Resource) GetMiMemory() int {
 
 // GetPodKey returns <namespace>-<pod name>
 func (p Pod) GetPodKey() string {
-	return p.Metadata.Namespace + "-" + p.Metadata.Name
+	return p.Metadata.Namespace + "|" + p.Metadata.Name
 }
 
 // GetDeploymentdKey returns <namespace>-<pod name>
 func (p Pod) GetDeploymentdKey() string {
-	return p.Metadata.Namespace + "-" + p.GetDeploymentName()
+	return p.Metadata.Namespace + "|" + p.GetDeploymentName()
 }
 
 // GetDeploymentName should work for most of the cases

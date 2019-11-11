@@ -11,10 +11,10 @@
             "mode": "auto",
             "program": "${workspaceFolder}/16_kubectl_plugin",
             "env": {},
-            "args": ["-d", "checkoutservice", "-n", "default"]
+            //"args": ["-d", "checkoutservice", "-n", "default"]
             //"args": ["-p", "shippingservice-545f46fb7f-f4c5b", "-n", "default"]
             //"args": ["-n", "default"]
-            //"args": ["-all-namespaces"]
+            "args": ["-debug"]
         }
     ]
 }
