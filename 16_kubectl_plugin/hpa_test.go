@@ -25,34 +25,36 @@ func TestBuildHpaList(t *testing.T) {
 	}
 }
 
-// func TestBuildhpaTopDefaultNamespace(t *testing.T) {
-// 	b, err := ioutil.ReadFile("test-data/top-many-hpas.json")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	data := string(b)
+func TestBuildHpaMap(t *testing.T) {
+	data := `default        nginx-1-hpa                                             Deployment/nginx-1                 <unknown>/80%   1         5         3          33d
+default        paymentservice                                          Deployment/paymentservice          4%/80%          2         20        2          87d`
+	hpas := buildHpaMap(data, "")
 
-// 	hpas := buildTopList(data, "default")
-// 	ex := 23
-// 	if l := len(hpas); l != ex {
-// 		t.Fatalf("Test failed! found %d expected %d", l, ex)
-// 	}
-// }
+	hpa := hpas["default|Deployment/nginx-1"]
+	if hpa.Namespace != "default" ||
+		hpa.Name != "nginx-1-hpa" ||
+		hpa.ReferenceKind != "Deployment" ||
+		hpa.ReferenceName != "nginx-1" ||
+		hpa.UsageCPU != -1 ||
+		hpa.Target != 80 ||
+		hpa.MinPods != 1 ||
+		hpa.MaxPods != 5 ||
+		hpa.Replicas != 3 ||
+		hpa.Age != "33d" {
+		t.Fatalf("Test failed! hpa does not match data")
+	}
 
-// func TestBuildOnehpaTop(t *testing.T) {
-// 	b, err := ioutil.ReadFile("test-data/top-one-hpa.json")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	data := string(b)
-
-// 	top := buildTopList(data, "")[0]
-// 	expectedCPU := 32
-// 	if cpu := top.GetMilliCPU(); cpu != expectedCPU {
-// 		t.Fatalf("Test failed! %d but expected %d", cpu, expectedCPU)
-// 	}
-// 	expectedMemory := 25
-// 	if mem := top.GetMiMemory(); mem != expectedMemory {
-// 		t.Fatalf("Test failed! %d but expected %d", mem, expectedMemory)
-// 	}
-// }
+	hpa = hpas["default|Deployment/paymentservice"]
+	if hpa.Namespace != "default" ||
+		hpa.Name != "paymentservice" ||
+		hpa.ReferenceKind != "Deployment" ||
+		hpa.ReferenceName != "paymentservice" ||
+		hpa.UsageCPU != 4 ||
+		hpa.Target != 80 ||
+		hpa.MinPods != 2 ||
+		hpa.MaxPods != 20 ||
+		hpa.Replicas != 2 ||
+		hpa.Age != "87d" {
+		t.Fatalf("Test failed! hpa does not match data")
+	}
+}

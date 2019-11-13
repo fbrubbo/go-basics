@@ -12,9 +12,10 @@
             "program": "${workspaceFolder}/16_kubectl_plugin",
             "env": {},
             //"args": ["-d", "checkoutservice", "-n", "default"]
-            //"args": ["-p", "shippingservice-545f46fb7f-f4c5b", "-n", "default"]
-            //"args": ["-n", "default"]
-            "args": ["-debug"]
+            //"args": ["-p", "checkoutservice-b768cb558-rq72c", "-n", "default"]
+            //"args": ["-n", "config-management-system"]
+            //"args": ["-debug"]
+            "args": ["-csv-output"]
         }
     ]
 }

@@ -25,8 +25,11 @@ type Pod struct {
 
 // Metadata struct
 type Metadata struct {
-	Name      string
-	Namespace string
+	Name            string
+	Namespace       string
+	OwnerReferences []struct {
+		Name string
+	}
 }
 
 // Spec struct
@@ -104,11 +107,24 @@ func (p Pod) GetDeploymentdKey() string {
 	return p.Metadata.Namespace + "|" + p.GetDeploymentName()
 }
 
+// GetReplicaSetKey returns <namespace>-<pod name>
+func (p Pod) GetReplicaSetKey() string {
+	return p.Metadata.Namespace + "|" + p.GetReplicaSetName()
+}
+
 // GetDeploymentName should work for most of the cases
 func (p Pod) GetDeploymentName() string {
 	reg, _ := regexp.Compile(`(.*)-([^-]*)-([^-]*)`)
 	result := reg.FindStringSubmatch(p.Metadata.Name)
 	return result[1]
+}
+
+// GetReplicaSetName should work for most of the cases
+func (p Pod) GetReplicaSetName() string {
+	if p.Metadata.OwnerReferences == nil {
+		return "<no-references>"
+	}
+	return p.Metadata.OwnerReferences[0].Name
 }
 
 // GetRequestsMilliCPU total
@@ -127,7 +143,14 @@ func (p Pod) GetTopMilliCPU() int {
 
 // GetUsageCPU %
 func (p Pod) GetUsageCPU() float32 {
-	return float32(p.GetTopMilliCPU()) / float32(p.GetRequestsMilliCPU()) * 100
+	top := float32(p.GetTopMilliCPU())
+	requests := float32(p.GetRequestsMilliCPU())
+	if top == 0 && requests != 0 {
+		return 0
+	} else if requests == 0 {
+		return 100
+	}
+	return top / requests * 100
 }
 
 // GetRequestsMiMemory total
@@ -146,7 +169,14 @@ func (p Pod) GetTopMiMemory() int {
 
 // GetUsageMemory %
 func (p Pod) GetUsageMemory() float32 {
-	return float32(p.GetTopMiMemory()) / float32(p.GetRequestsMiMemory()) * 100
+	top := float32(p.GetTopMiMemory())
+	requests := float32(p.GetRequestsMiMemory())
+	if top == 0 && requests != 0 {
+		return 0
+	} else if requests == 0 {
+		return 100
+	}
+	return top / requests * 100
 }
 
 // GetLimitsMilliCPU total

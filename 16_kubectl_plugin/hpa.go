@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/bradfitz/slice"
 )
 
 // Hpa struct
@@ -21,49 +23,92 @@ type Hpa struct {
 	MaxPods       int
 	Replicas      int
 	Age           string
+	Pods          []Pod
 }
 
-// // GetDeploymentName should work for most of the cases
-// func (t Top) GetDeploymentName() string {
-// 	reg, _ := regexp.Compile(`(.*)-([^-]*)-([^-]*)`)
-// 	result := reg.FindStringSubmatch(t.Pod)
-// 	return result[1]
-// }
+// GetDeploymentKey should work for most of the cases
+func (h Hpa) GetDeploymentKey() string {
+	return h.Namespace + "|" + h.GetReference()
+}
 
-// // GetMilliCPU total pod cpu
-// func (t Top) GetMilliCPU() int {
-// 	total := 0
-// 	for _, c := range t.Containers {
-// 		str := strings.ReplaceAll(c.CPU, "m", "")
-// 		milli, _ := strconv.Atoi(str)
-// 		total += milli
-// 	}
-// 	return total
-// }
+// GetReference ..
+func (h Hpa) GetReference() string {
+	return h.ReferenceKind + "/" + h.ReferenceName
+}
 
-// // GetMiMemory returns the memory in Mi
-// func (t Top) GetMiMemory() int {
-// 	total := 0
-// 	for _, c := range t.Containers {
-// 		reg, _ := regexp.Compile(`(\d*)(.*)`)
-// 		groups := reg.FindStringSubmatch(c.Memory)
-// 		memory, _ := strconv.Atoi(groups[1])
-// 		total += memory
-// 	}
-// 	return total
-// }
+// GetUsageAndTarget ..
+func (h Hpa) GetUsageAndTarget() string {
+	if h.UsageCPU == -1 {
+		return "<unknown>/" + strconv.Itoa(h.Target) + "%"
+	}
+	return strconv.Itoa(h.UsageCPU) + "%/" + strconv.Itoa(h.Target) + "%"
+}
 
-// RetrieveHpaMap executes kubectl get hpas command
+// IsDeployment ..
+func (h Hpa) IsDeployment() bool {
+	return h.ReferenceKind == "Deployment"
+}
+
+// RefToDeployment ..
+func (h Hpa) RefToDeployment(deployment string) bool {
+	return h.IsDeployment() && h.ReferenceName == deployment
+}
+
+// ContainsPod ..
+func (h Hpa) ContainsPod(pod string) bool {
+	set := make(map[string]bool, len(h.Pods))
+	for _, pod := range h.Pods {
+		set[pod.Metadata.Name] = true
+	}
+	_, ok := set[pod]
+	return ok
+}
+
+// RetrieveHpas executes kubectl get hpas command
 // if ns is empty, then all namespaces are used
-// returns key =  hpa.Namespace + "|" + hpa.ReferenceKind + "/" + hpa.ReferenceName
-func RetrieveHpaMap(ns string) map[string]Hpa {
+func RetrieveHpas(nsFilter string, podList []Pod) []Hpa {
 	cmd := "kubectl get hpa --all-namespaces --no-headers"
 	out, err := exec.Command("bash", "-c", cmd).CombinedOutput()
 	if err != nil {
 		log.Fatalf("Failed to execute command: %s", cmd)
 	}
 	data := string(out)
-	return buildHpaMap(data, ns)
+
+	deploymentMap := make(map[string][]Pod)
+	replicaSetMap := make(map[string][]Pod)
+	for _, pod := range podList {
+		deployment := pod.GetDeploymentdKey()
+		if deploymentMap[deployment] == nil {
+			deploymentMap[deployment] = []Pod{pod}
+		} else {
+			deploymentMap[deployment] = append(deploymentMap[deployment], pod)
+		}
+
+		replicaset := pod.GetReplicaSetKey()
+		if replicaSetMap[replicaset] == nil {
+			replicaSetMap[replicaset] = []Pod{pod}
+		} else {
+			replicaSetMap[replicaset] = append(replicaSetMap[replicaset], pod)
+		}
+	}
+
+	hpaList := buildHpaList(data, nsFilter)
+	resultList := []Hpa{}
+	for _, hpa := range hpaList {
+		key := hpa.Namespace + "|" + hpa.ReferenceName
+		if hpa.ReferenceKind == "Deployment" {
+			hpa.Pods = deploymentMap[key]
+		} else if hpa.ReferenceKind == "ReplicaSet" {
+			hpa.Pods = replicaSetMap[key]
+		} else {
+			// not implemented - return empty pods
+		}
+		resultList = append(resultList, hpa)
+	}
+	slice.Sort(resultList, func(i, j int) bool {
+		return (resultList[i].Namespace + resultList[i].Name) < (resultList[j].Namespace + resultList[j].Name)
+	})
+	return resultList
 }
 
 func buildHpaList(data string, nsFilter string) []Hpa {
@@ -79,19 +124,21 @@ func buildHpaMap(data string, nsFilter string) map[string]Hpa {
 	scanner := bufio.NewScanner(strings.NewReader(data))
 	hpaMap := make(map[string]Hpa)
 	for scanner.Scan() {
-		reg, _ := regexp.Compile(`(\S*)\s*(\S*)\s*(\S*)\/(\S*)\s*(\S*)%?\/(\S*)%\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*`)
+		//reg, _ := regexp.Compile(`(\S*)\s*(\S*)\s*(\S*)\/(\S*)\s*(\S*)\%?\/(\S*)%\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*`)
+		reg, _ := regexp.Compile(`(\S*)\s*(\S*)\s*(\S*)\/(\S*)\s*((\S*)%|(<unknown>))\/(\S*)%\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*`)
 		txt := scanner.Text()
 		groups := reg.FindStringSubmatch(txt)
 		mamespace := groups[1]
 		if nsFilter == "" || nsFilter == mamespace {
-			usageCPU, err := strconv.Atoi(groups[5])
-			if err != nil {
-				usageCPU = 0
+			usageCPU := -1
+			if groups[6] != "" {
+				usageCPU, _ = strconv.Atoi(groups[6])
 			}
-			target, _ := strconv.Atoi(groups[6])
-			minPods, _ := strconv.Atoi(groups[7])
-			maxPods, _ := strconv.Atoi(groups[8])
-			replicas, _ := strconv.Atoi(groups[9])
+
+			target, _ := strconv.Atoi(groups[8])
+			minPods, _ := strconv.Atoi(groups[9])
+			maxPods, _ := strconv.Atoi(groups[10])
+			replicas, _ := strconv.Atoi(groups[11])
 			hpa := Hpa{
 				Namespace:     mamespace,
 				Name:          groups[2],
@@ -102,10 +149,9 @@ func buildHpaMap(data string, nsFilter string) map[string]Hpa {
 				MinPods:       minPods,
 				MaxPods:       maxPods,
 				Replicas:      replicas,
-				Age:           groups[10],
+				Age:           groups[12],
 			}
-			key := hpa.Namespace + "|" + hpa.ReferenceKind + "/" + hpa.ReferenceName
-			hpaMap[key] = hpa
+			hpaMap[hpa.GetDeploymentKey()] = hpa
 		}
 	}
 	if err := scanner.Err(); err != nil {

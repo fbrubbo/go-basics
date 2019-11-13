@@ -84,6 +84,10 @@ func TestBuildOnePod(t *testing.T) {
 	if re := pr.GetDeploymentName(); re != ex {
 		t.Fatalf("Test failed! %s but expected %s", re, ex)
 	}
+	ex = "shippingservice-545f46fb7f"
+	if re := pr.GetReplicaSetName(); re != ex {
+		t.Fatalf("Test failed! %s but expected %s", re, ex)
+	}
 	ex = "gke-central-pool-1-47d730e3-sh01"
 	if re := pr.Spec.NodeName; re != ex {
 		t.Fatalf("Test failed! %s but expected %s", re, ex)
