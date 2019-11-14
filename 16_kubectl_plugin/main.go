@@ -22,9 +22,8 @@ func main() {
 	show := flag.String("print", "all", "Define what will be printed. Valid values all|pods|hpas|nodes ")
 	csv := flag.Bool("csv-output", false, "Save the result to files with format 'kubectl-snapshot-<date>-<pods|hpas|nohpa|nodes|all>.csv'")
 	debug := flag.Bool("debug", false, "Show debug info")
-	noHeaders := flag.Bool("no-headers", false, "When true, remove filters")
 	flag.Parse()
-	printFlags(*p, *d, *n, *v, *show, *csv, *debug, *noHeaders)
+	printFlags(*p, *d, *n, *v, *show, *csv, *debug)
 
 	if *v || *debug {
 		fmt.Println("Plugin Version: ", version)
@@ -93,7 +92,7 @@ func main() {
 
 }
 
-func printFlags(p string, d string, n string, v bool, show string, csv bool, debug bool, noHeaders bool) {
+func printFlags(p string, d string, n string, v bool, show string, csv bool, debug bool) {
 	if debug {
 		fmt.Println("---------------------------------------------")
 		fmt.Println("[debug] FLAGS: ")
@@ -103,7 +102,6 @@ func printFlags(p string, d string, n string, v bool, show string, csv bool, deb
 		fmt.Println("   -v [VERSION] is: ", v)
 		fmt.Println("   -print [PRINT IN STANDARD OUTPUT] is: ", show)
 		fmt.Println("   -csv-output [SAVE TO FILES] is: ", csv)
-		fmt.Println("   -no-headers [NO HEADERS] is: ", noHeaders)
 		fmt.Println("---------------------------------------------")
 		fmt.Println()
 	}
