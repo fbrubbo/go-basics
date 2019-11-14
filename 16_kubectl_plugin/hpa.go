@@ -7,8 +7,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/bradfitz/slice"
 )
 
 // Hpa struct
@@ -74,57 +72,13 @@ func RetrieveHpas(nsFilter string, podList []Pod) []Hpa {
 	}
 	data := string(out)
 
-	deploymentMap := make(map[string][]Pod)
-	replicaSetMap := make(map[string][]Pod)
-	for _, pod := range podList {
-		deployment := pod.GetDeploymentdKey()
-		if deploymentMap[deployment] == nil {
-			deploymentMap[deployment] = []Pod{pod}
-		} else {
-			deploymentMap[deployment] = append(deploymentMap[deployment], pod)
-		}
-
-		replicaset := pod.GetReplicaSetKey()
-		if replicaSetMap[replicaset] == nil {
-			replicaSetMap[replicaset] = []Pod{pod}
-		} else {
-			replicaSetMap[replicaset] = append(replicaSetMap[replicaset], pod)
-		}
-	}
-
-	hpaList := buildHpaList(data, nsFilter)
-	resultList := []Hpa{}
-	for _, hpa := range hpaList {
-		key := hpa.Namespace + "|" + hpa.ReferenceName
-		if hpa.ReferenceKind == "Deployment" {
-			hpa.Pods = deploymentMap[key]
-		} else if hpa.ReferenceKind == "ReplicaSet" {
-			hpa.Pods = replicaSetMap[key]
-		} else {
-			// not implemented - return empty pods
-		}
-		resultList = append(resultList, hpa)
-	}
-	slice.Sort(resultList, func(i, j int) bool {
-		return (resultList[i].Namespace + resultList[i].Name) < (resultList[j].Namespace + resultList[j].Name)
-	})
-	return resultList
+	return buildHpaList(data, nsFilter, podList)
 }
 
-func buildHpaList(data string, nsFilter string) []Hpa {
-	hpaMap := buildHpaMap(data, nsFilter)
-	var hpas []Hpa
-	for _, v := range hpaMap {
-		hpas = append(hpas, v)
-	}
-	return hpas
-}
-
-func buildHpaMap(data string, nsFilter string) map[string]Hpa {
+func buildHpaList(data string, nsFilter string, podList []Pod) (hpas []Hpa) {
+	deploymentMap, replicaSetMap := buildPodMaps(podList)
 	scanner := bufio.NewScanner(strings.NewReader(data))
-	hpaMap := make(map[string]Hpa)
 	for scanner.Scan() {
-		//reg, _ := regexp.Compile(`(\S*)\s*(\S*)\s*(\S*)\/(\S*)\s*(\S*)\%?\/(\S*)%\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*`)
 		reg, _ := regexp.Compile(`(\S*)\s*(\S*)\s*(\S*)\/(\S*)\s*((\S*)%|(<unknown>))\/(\S*)%\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*`)
 		txt := scanner.Text()
 		groups := reg.FindStringSubmatch(txt)
@@ -151,11 +105,41 @@ func buildHpaMap(data string, nsFilter string) map[string]Hpa {
 				Replicas:      replicas,
 				Age:           groups[12],
 			}
-			hpaMap[hpa.GetDeploymentKey()] = hpa
+			// enrich hpa with pods
+			key := hpa.Namespace + "|" + hpa.ReferenceName
+			if hpa.ReferenceKind == "Deployment" {
+				hpa.Pods = deploymentMap[key]
+			} else if hpa.ReferenceKind == "ReplicaSet" {
+				hpa.Pods = replicaSetMap[key]
+			} else {
+				// not implemented - return empty pods
+			}
+			hpas = append(hpas, hpa)
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
-	return hpaMap
+	return hpas
+}
+
+func buildPodMaps(podList []Pod) (map[string][]Pod, map[string][]Pod) {
+	deploymentMap := make(map[string][]Pod)
+	replicaSetMap := make(map[string][]Pod)
+	for _, pod := range podList {
+		deployment := pod.GetDeploymentdKey()
+		if deploymentMap[deployment] == nil {
+			deploymentMap[deployment] = []Pod{pod}
+		} else {
+			deploymentMap[deployment] = append(deploymentMap[deployment], pod)
+		}
+
+		replicaset := pod.GetReplicaSetKey()
+		if replicaSetMap[replicaset] == nil {
+			replicaSetMap[replicaset] = []Pod{pod}
+		} else {
+			replicaSetMap[replicaset] = append(replicaSetMap[replicaset], pod)
+		}
+	}
+	return deploymentMap, replicaSetMap
 }

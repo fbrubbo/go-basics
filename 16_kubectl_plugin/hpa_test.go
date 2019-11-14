@@ -13,7 +13,7 @@ func TestBuildHpaList(t *testing.T) {
 	}
 	data := string(b)
 
-	hpas := buildHpaList(data, "")
+	hpas := buildHpaList(data, "", []Pod{})
 	ex := 18
 	if l := len(hpas); l != ex {
 		t.Fatalf("Test failed! found %d expected %d", l, ex)
@@ -28,9 +28,9 @@ func TestBuildHpaList(t *testing.T) {
 func TestBuildHpaMap(t *testing.T) {
 	data := `default        nginx-1-hpa                                             Deployment/nginx-1                 <unknown>/80%   1         5         3          33d
 default        paymentservice                                          Deployment/paymentservice          4%/80%          2         20        2          87d`
-	hpas := buildHpaMap(data, "")
+	hpas := buildHpaList(data, "", []Pod{})
 
-	hpa := hpas["default|Deployment/nginx-1"]
+	hpa := hpas[0]
 	if hpa.Namespace != "default" ||
 		hpa.Name != "nginx-1-hpa" ||
 		hpa.ReferenceKind != "Deployment" ||
@@ -44,7 +44,7 @@ default        paymentservice                                          Deploymen
 		t.Fatalf("Test failed! hpa does not match data")
 	}
 
-	hpa = hpas["default|Deployment/paymentservice"]
+	hpa = hpas[1]
 	if hpa.Namespace != "default" ||
 		hpa.Name != "paymentservice" ||
 		hpa.ReferenceKind != "Deployment" ||

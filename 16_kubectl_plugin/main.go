@@ -20,7 +20,7 @@ func main() {
 	n := flag.String("n", "", "Filter by namespace name (default:empty means all namespaces)")
 	v := flag.Bool("v", false, "Show the plugin version")
 	show := flag.String("print", "all", "Define what will be printed. Valid values all|pods|hpas|nodes ")
-	csv := flag.Bool("csv-output", false, "Save the result to files with format 'kubectl-snapshot-<date>-<pods|hpas|nodes|all>.csv'")
+	csv := flag.Bool("csv-output", false, "Save the result to files with format 'kubectl-snapshot-<date>-<pods|hpas|nohpa|nodes|all>.csv'")
 	debug := flag.Bool("debug", false, "Show debug info")
 	noHeaders := flag.Bool("no-headers", false, "When true, remove filters")
 	flag.Parse()
@@ -28,45 +28,67 @@ func main() {
 
 	if *v || *debug {
 		fmt.Println("Plugin Version: ", version)
-		os.Exit(0)
+		if *v {
+			os.Exit(0)
+		}
+	}
+	csvFilePrefix := ""
+	if *csv {
+		now := time.Now()
+		csvFilePrefix = now.Format("kubectl-snapshot-2006-01-02-1504")
 	}
 
+	// Pods with resource usage (top) ..
 	podList := RetrievePods(*n)
-	var resultWrapper Wrapper
 	if *p != "" {
-		resultWrapper = filterPod(podList, *p)
+		podList = filterPod2(podList, func(pod Pod) bool { return pod.Metadata.Name == *p })
 	} else if *d != "" {
-		resultWrapper = filterDeployment(podList, *d)
-	} else {
-		resultWrapper = Wrapper{Type: "All Pods", Pods: podList}
+		podList = filterPod2(podList, func(pod Pod) bool { return pod.GetDeploymentName() == *d })
 	}
 
-	hpaList := RetrieveHpas(*n, resultWrapper.Pods)
+	// Hpas, use podList to confirm resource usgage ..
+	hpaList := RetrieveHpas(*n, podList)
 	if *p != "" {
 		hpaList = filterHpa(hpaList, func(h Hpa) bool { return h.ContainsPod(*p) })
 	} else if *d != "" {
 		hpaList = filterHpa(hpaList, func(h Hpa) bool { return h.RefToDeployment(*d) })
 	}
 
-	csvFilePrefix := ""
-	if *csv {
-		now := time.Now()
-		csvFilePrefix = now.Format("kubectl-snapshot-2006-01-02-1504")
+	// Deployments for non-hpas, use podList to confirm resource usgage ..
+	deploymentList := RetrieveDeployments(*n, podList)
+	if *p != "" {
+		deploymentList = filterDeployment(deploymentList, func(deploy Deployment) bool { return deploy.ContainsPod(*p) })
+	} else if *d != "" {
+		deploymentList = filterDeployment(deploymentList, func(deploy Deployment) bool { return deploy.Name == *d })
 	}
+	hpaMap := make(map[string]Hpa)
+	for _, hpa := range hpaList {
+		hpaMap[hpa.Namespace+"|"+hpa.ReferenceName] = hpa
+	}
+	deploymentWithoutHpa := []Deployment{}
+	for _, deploy := range deploymentList {
+		if _, hasHpa := hpaMap[deploy.GetDeploymentKey()]; !hasHpa {
+			deploymentWithoutHpa = append(deploymentWithoutHpa, deploy)
+		}
+	}
+
+	// Print standard io or send to csv files ..
 	switch *show {
 	case "pod":
 	case "pods":
-		printPodsTab(resultWrapper, csvFilePrefix)
+		printPodsTab(podList, csvFilePrefix, *debug)
 	case "hpa":
 	case "hpas":
-		printHpaTab(hpaList, csvFilePrefix)
+		printHpaTab(hpaList, csvFilePrefix, *debug)
+		printNoHpaTab(deploymentWithoutHpa, csvFilePrefix, *debug)
 	case "node":
 	case "nodes":
-		printNodesTab(resultWrapper, *debug, csvFilePrefix)
+		printNodesTab(podList, csvFilePrefix, *debug)
 	default:
-		printPodsTab(resultWrapper, csvFilePrefix)
-		printHpaTab(hpaList, csvFilePrefix)
-		printNodesTab(resultWrapper, *debug, csvFilePrefix)
+		printPodsTab(podList, csvFilePrefix, *debug)
+		printHpaTab(hpaList, csvFilePrefix, *debug)
+		printNoHpaTab(deploymentWithoutHpa, csvFilePrefix, *debug)
+		printNodesTab(podList, csvFilePrefix, *debug)
 	}
 
 }
@@ -87,19 +109,23 @@ func printFlags(p string, d string, n string, v bool, show string, csv bool, deb
 	}
 }
 
-func printPodsTab(result Wrapper, csvFilePrefix string) {
-	formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
-	formatValues := "%v\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\n"
-	fmt.Println("\nPODs SNAPSHOT:")
-	w := tabwriter.NewWriter(os.Stdout, 0, 1, 2, ' ', tabwriter.TabIndent)
-	fmt.Fprintf(w, formatHeader, "Namespace", "Pod Name", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)")
-	fmt.Fprintf(w, formatHeader, "---------", "--------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
-	for _, pod := range result.Pods {
-		fmt.Fprintf(w, formatValues, pod.Metadata.Namespace, pod.Metadata.Name, pod.GetRequestsMilliCPU(), pod.GetTopMilliCPU(), pod.GetUsageCPU(), pod.GetRequestsMiMemory(), pod.GetTopMiMemory(), pod.GetUsageMemory(), pod.GetLimitsMilliCPU(), pod.GetLimitsMiMemory())
+func printPodsTab(podList []Pod, csvFilePrefix string, debug bool) {
+	result := Wrapper{Pods: podList}
+
+	if csvFilePrefix == "" || debug {
+		formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
+		formatValues := "%v\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\n"
+		fmt.Println("\nPODs SNAPSHOT:")
+		w := tabwriter.NewWriter(os.Stdout, 0, 1, 2, ' ', tabwriter.TabIndent)
+		fmt.Fprintf(w, formatHeader, "Namespace", "Pod Name", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)")
+		fmt.Fprintf(w, formatHeader, "---------", "--------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
+		for _, pod := range result.Pods {
+			fmt.Fprintf(w, formatValues, pod.Metadata.Namespace, pod.Metadata.Name, pod.GetRequestsMilliCPU(), pod.GetTopMilliCPU(), pod.GetUsageCPU(), pod.GetRequestsMiMemory(), pod.GetTopMiMemory(), pod.GetUsageMemory(), pod.GetLimitsMilliCPU(), pod.GetLimitsMiMemory())
+		}
+		fmt.Fprintf(w, formatHeader, " ", " ", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
+		fmt.Fprintf(w, formatValues, " ", " ", result.GetRequestsMilliCPU(), result.GetTopMilliCPU(), result.GetUsageCPU(), result.GetRequestsMiMemory(), result.GetTopMiMemory(), result.GetUsageMemory(), result.GetLimitsMilliCPU(), result.GetLimitsMiMemory())
+		w.Flush()
 	}
-	fmt.Fprintf(w, formatHeader, " ", " ", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
-	fmt.Fprintf(w, formatValues, " ", " ", result.GetRequestsMilliCPU(), result.GetTopMilliCPU(), result.GetUsageCPU(), result.GetRequestsMiMemory(), result.GetTopMiMemory(), result.GetUsageMemory(), result.GetLimitsMilliCPU(), result.GetLimitsMiMemory())
-	w.Flush()
 
 	if csvFilePrefix != "" {
 		file, err := os.Create(csvFilePrefix + "-pods.csv")
@@ -126,20 +152,22 @@ func printPodsTab(result Wrapper, csvFilePrefix string) {
 	}
 }
 
-func printHpaTab(hpaList []Hpa, csvFilePrefix string) {
-	formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
-	formatValues := "%v\t%v\t%v\t%v\t%v\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\n"
-	fmt.Println("\nHPAs SNAPSHOT:")
-	w := tabwriter.NewWriter(os.Stdout, 0, 1, 2, ' ', tabwriter.TabIndent)
-	fmt.Fprintf(w, formatHeader, "Namespace", "Hpa Name", "Reference", "Target", "Replicas (Min/Max/Actual)", "# Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)")
-	fmt.Fprintf(w, formatHeader, "---------", "--------", "---------", "------", "-------------------------", "---------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
-	for _, hpa := range hpaList {
-		wp := Wrapper{Pods: hpa.Pods}
-		replicas := fmt.Sprintf("%d/%d/%d", hpa.MinPods, hpa.MaxPods, hpa.Replicas)
-		fmt.Fprintf(w, formatValues, hpa.Namespace, hpa.Name, hpa.GetReference(), hpa.GetUsageAndTarget(), replicas, len(hpa.Pods), wp.GetRequestsMilliCPU(), wp.GetTopMilliCPU(), wp.GetUsageCPU(), wp.GetRequestsMiMemory(), wp.GetTopMiMemory(), wp.GetUsageMemory(), wp.GetLimitsMilliCPU(), wp.GetLimitsMiMemory())
+func printHpaTab(hpaList []Hpa, csvFilePrefix string, debug bool) {
+	if csvFilePrefix == "" || debug {
+		formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
+		formatValues := "%v\t%v\t%v\t%v\t%v\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\n"
+		fmt.Println("\nHPAs SNAPSHOT:")
+		w := tabwriter.NewWriter(os.Stdout, 0, 1, 2, ' ', tabwriter.TabIndent)
+		fmt.Fprintf(w, formatHeader, "Namespace", "Hpa Name", "Reference", "Target", "Replicas (Min/Max/Actual)", "# Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)")
+		fmt.Fprintf(w, formatHeader, "---------", "--------", "---------", "------", "-------------------------", "---------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
+		for _, hpa := range hpaList {
+			wp := Wrapper{Pods: hpa.Pods}
+			replicas := fmt.Sprintf("%d/%d/%d", hpa.MinPods, hpa.MaxPods, hpa.Replicas)
+			fmt.Fprintf(w, formatValues, hpa.Namespace, hpa.Name, hpa.GetReference(), hpa.GetUsageAndTarget(), replicas, len(hpa.Pods), wp.GetRequestsMilliCPU(), wp.GetTopMilliCPU(), wp.GetUsageCPU(), wp.GetRequestsMiMemory(), wp.GetTopMiMemory(), wp.GetUsageMemory(), wp.GetLimitsMilliCPU(), wp.GetLimitsMiMemory())
+		}
+		fmt.Fprintf(w, formatHeader, " ", " ", " ", "------", "-------------------------", "---------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
+		w.Flush()
 	}
-	fmt.Fprintf(w, formatHeader, " ", " ", " ", "------", "-------------------------", "---------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
-	w.Flush()
 
 	if csvFilePrefix != "" {
 		file, err := os.Create(csvFilePrefix + "-hpas.csv")
@@ -171,7 +199,51 @@ func printHpaTab(hpaList []Hpa, csvFilePrefix string) {
 	}
 }
 
-func printNodesTab(result Wrapper, debug bool, csvFilePrefix string) {
+func printNoHpaTab(deploymentWithoutHpa []Deployment, csvFilePrefix string, debug bool) {
+	if csvFilePrefix == "" || debug {
+		formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
+		formatValues := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\n"
+		fmt.Println("\nNO HPA SNAPSHOT:")
+		w := tabwriter.NewWriter(os.Stdout, 0, 1, 2, ' ', tabwriter.TabIndent)
+		fmt.Fprintf(w, formatHeader, "Namespace", "Deployment Name", "Ready", "Up To Date", "Avaliable", "Age", "#Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)")
+		fmt.Fprintf(w, formatHeader, "---------", "---------------", "-----", "----------", "---------", "---", "--------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
+		for _, deploy := range deploymentWithoutHpa {
+			wp := Wrapper{Pods: deploy.Pods}
+			ready := fmt.Sprintf("%d/%d", deploy.Replicas, deploy.ReplicasExpected)
+			fmt.Fprintf(w, formatValues, deploy.Namespace, deploy.Name, ready, deploy.UpToDate, deploy.Avaliable, deploy.Age, len(deploy.Pods), wp.GetRequestsMilliCPU(), wp.GetTopMilliCPU(), wp.GetUsageCPU(), wp.GetRequestsMiMemory(), wp.GetTopMiMemory(), wp.GetUsageMemory(), wp.GetLimitsMilliCPU(), wp.GetLimitsMiMemory())
+		}
+		fmt.Fprintf(w, formatHeader, " ", " ", "-----", "----------", "---------", "---", "--------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
+		w.Flush()
+	}
+
+	if csvFilePrefix != "" {
+		file, err := os.Create(csvFilePrefix + "-nohpa.csv")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+
+		writer := csv.NewWriter(file)
+		defer writer.Flush()
+
+		header := []string{"Namespace", "Deployment Name", "Replicas", "Expected Replicas", "Up To Date", "Avaliable", "Age", "#Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)"}
+		err = writer.Write(header)
+		if err != nil {
+			log.Fatal(err)
+		}
+		for _, deploy := range deploymentWithoutHpa {
+			wp := Wrapper{Pods: deploy.Pods}
+			line := []string{deploy.Namespace, deploy.Name, strconv.Itoa(deploy.Replicas), strconv.Itoa(deploy.ReplicasExpected), strconv.Itoa(deploy.UpToDate), strconv.Itoa(deploy.Avaliable), deploy.Age, strconv.Itoa(len(deploy.Pods)), strconv.Itoa(wp.GetRequestsMilliCPU()), strconv.Itoa(wp.GetTopMilliCPU()), fmt.Sprintf("%.2f", wp.GetUsageCPU()), strconv.Itoa(wp.GetRequestsMiMemory()), strconv.Itoa(wp.GetTopMiMemory()), fmt.Sprintf("%.2f", wp.GetUsageMemory()), strconv.Itoa(wp.GetLimitsMilliCPU()), strconv.Itoa(wp.GetLimitsMiMemory())}
+			err := writer.Write(line)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	}
+}
+
+func printNodesTab(podList []Pod, csvFilePrefix string, debug bool) {
+	result := Wrapper{Pods: podList}
 	podsInNodes := make(map[string][]Pod)
 	for _, pod := range result.Pods {
 		nodeName := pod.Spec.NodeName
@@ -181,50 +253,53 @@ func printNodesTab(result Wrapper, debug bool, csvFilePrefix string) {
 			podsInNodes[nodeName] = []Pod{pod}
 		}
 	}
-	fmt.Println("\n\nNODEs SNAPSHOT:")
-	formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
-	formatValues := "%v\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\n"
-	tw := tabwriter.NewWriter(os.Stdout, 0, 1, 2, ' ', tabwriter.TabIndent)
-	fmt.Fprintf(tw, formatHeader, "Node", "Num Pods In Node", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)")
-	fmt.Fprintf(tw, formatHeader, "----", "----------------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
-	min := 999
-	max := 0
-	total := 0
-	for nodeName, pods := range podsInNodes {
-		nPods := len(pods)
-		total += nPods
-		if nPods > max {
-			max = nPods
-		}
-		if min > nPods {
-			min = nPods
-		}
-		w := Wrapper{Pods: pods}
-		fmt.Fprintf(tw, formatValues, nodeName, nPods, w.GetRequestsMilliCPU(), w.GetTopMilliCPU(), w.GetUsageCPU(), w.GetRequestsMiMemory(), w.GetTopMiMemory(), w.GetUsageMemory(), w.GetLimitsMilliCPU(), w.GetLimitsMiMemory())
-	}
-	avg := 0
-	if len(podsInNodes) > 0 {
-		avg = total / len(podsInNodes)
-	} else {
-		min = 0
-	}
-	fmt.Fprintf(tw, formatHeader, " ", "----------------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
-	summary := fmt.Sprintf("Min:%d/Max:%d/Avg:%d", min, max, avg)
-	fmt.Fprintf(tw, formatValues, " ", summary, result.GetRequestsMilliCPU(), result.GetTopMilliCPU(), result.GetUsageCPU(), result.GetRequestsMiMemory(), result.GetTopMiMemory(), result.GetUsageMemory(), result.GetLimitsMilliCPU(), result.GetLimitsMiMemory())
-	tw.Flush()
 
-	if debug {
-		fmt.Println()
-		fmt.Println("---------------------------------------------")
-		fmt.Println("[debug] PODS IN EACH NODE: ")
+	if csvFilePrefix == "" || debug {
+		fmt.Println("\n\nNODEs SNAPSHOT:")
+		formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
+		formatValues := "%v\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\n"
+		tw := tabwriter.NewWriter(os.Stdout, 0, 1, 2, ' ', tabwriter.TabIndent)
+		fmt.Fprintf(tw, formatHeader, "Node", "Num Pods In Node", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)")
+		fmt.Fprintf(tw, formatHeader, "----", "----------------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
+		min := 999
+		max := 0
+		total := 0
 		for nodeName, pods := range podsInNodes {
-			fmt.Printf(" - %s\n   [ ", nodeName)
-			for _, pod := range pods {
-				fmt.Printf("%s   ", pod.GetPodKey())
+			nPods := len(pods)
+			total += nPods
+			if nPods > max {
+				max = nPods
 			}
-			fmt.Println("]")
+			if min > nPods {
+				min = nPods
+			}
+			w := Wrapper{Pods: pods}
+			fmt.Fprintf(tw, formatValues, nodeName, nPods, w.GetRequestsMilliCPU(), w.GetTopMilliCPU(), w.GetUsageCPU(), w.GetRequestsMiMemory(), w.GetTopMiMemory(), w.GetUsageMemory(), w.GetLimitsMilliCPU(), w.GetLimitsMiMemory())
 		}
-		fmt.Println("---------------------------------------------")
+		avg := 0
+		if len(podsInNodes) > 0 {
+			avg = total / len(podsInNodes)
+		} else {
+			min = 0
+		}
+		fmt.Fprintf(tw, formatHeader, " ", "----------------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
+		summary := fmt.Sprintf("Min:%d/Max:%d/Avg:%d", min, max, avg)
+		fmt.Fprintf(tw, formatValues, " ", summary, result.GetRequestsMilliCPU(), result.GetTopMilliCPU(), result.GetUsageCPU(), result.GetRequestsMiMemory(), result.GetTopMiMemory(), result.GetUsageMemory(), result.GetLimitsMilliCPU(), result.GetLimitsMiMemory())
+		tw.Flush()
+
+		if debug {
+			fmt.Println()
+			fmt.Println("---------------------------------------------")
+			fmt.Println("[debug] PODS IN EACH NODE: ")
+			for nodeName, pods := range podsInNodes {
+				fmt.Printf(" - %s\n   [ ", nodeName)
+				for _, pod := range pods {
+					fmt.Printf("%s   ", pod.GetPodKey())
+				}
+				fmt.Println("]")
+			}
+			fmt.Println("---------------------------------------------")
+		}
 	}
 
 	if csvFilePrefix != "" {
@@ -256,7 +331,6 @@ func printNodesTab(result Wrapper, debug bool, csvFilePrefix string) {
 
 // Wrapper contains a list of pods
 type Wrapper struct {
-	Type string
 	Pods []Pod
 }
 
@@ -344,31 +418,28 @@ func (d Wrapper) GetLimitsMiMemory() int {
 	return total
 }
 
-func filterPod(podList []Pod, p string) Wrapper {
-	pods := make(map[string]Pod)
+func filterPod2(podList []Pod, test func(Pod) bool) (ret []Pod) {
 	for _, pod := range podList {
-		pods[pod.Metadata.Name] = pod
-	}
-	return Wrapper{Type: "Pod", Pods: []Pod{pods[p]}}
-}
-
-func filterDeployment(podList []Pod, d string) Wrapper {
-	pods := make(map[string][]Pod)
-	for _, pod := range podList {
-		deploymentName := pod.GetDeploymentName()
-		if pods[deploymentName] == nil {
-			pods[deploymentName] = []Pod{pod}
-		} else {
-			pods[deploymentName] = append(pods[deploymentName], pod)
+		if test(pod) {
+			ret = append(ret, pod)
 		}
 	}
-	return Wrapper{Type: "Deployment", Pods: pods[d]}
+	return
 }
 
 func filterHpa(hpaList []Hpa, test func(Hpa) bool) (ret []Hpa) {
 	for _, hpa := range hpaList {
 		if test(hpa) {
 			ret = append(ret, hpa)
+		}
+	}
+	return
+}
+
+func filterDeployment(deploymentList []Deployment, test func(Deployment) bool) (ret []Deployment) {
+	for _, deploy := range deploymentList {
+		if test(deploy) {
+			ret = append(ret, deploy)
 		}
 	}
 	return

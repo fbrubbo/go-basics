@@ -1,5 +1,0 @@
-Node,Num Pods In Node,Requests CPU (m),TOP CPU (m),Usage CPU (%),Requests Memory (Mi),TOP Memory (Mi),Usage Memory (%),Limits CPU (m),Limitis Memory (Mi)
-gke-central-pool-1-47d730e3-sh01,28,3889,409,10.52,5511,1645,29.85,31546,5067
-gke-central-pool-1-47d730e3-1tt0,31,3721,362,9.73,3730,2247,60.24,31838,5500
-gke-central-pool-1-47d730e3-709m,5,401,24,5.99,548,276,50.36,3003,976
-gke-central-pool-1-47d730e3-dkrw,5,1401,291,20.77,1502,414,27.56,7803,4663

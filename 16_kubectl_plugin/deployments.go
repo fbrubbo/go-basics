@@ -1,0 +1,91 @@
+package main
+
+import (
+	"bufio"
+	"log"
+	"os/exec"
+	"regexp"
+	"strconv"
+	"strings"
+)
+
+// Deployment struct
+type Deployment struct {
+	Namespace        string
+	Name             string
+	Replicas         int
+	ReplicasExpected int
+	UpToDate         int
+	Avaliable        int
+	Age              string
+	Pods             []Pod
+}
+
+// GetDeploymentKey should work for most of the cases
+func (d Deployment) GetDeploymentKey() string {
+	return d.Namespace + "|" + d.Name
+}
+
+// ContainsPod ..
+func (d Deployment) ContainsPod(pod string) bool {
+	set := make(map[string]bool, len(d.Pods))
+	for _, pod := range d.Pods {
+		set[pod.Metadata.Name] = true
+	}
+	_, ok := set[pod]
+	return ok
+}
+
+// RetrieveDeployments executes kubectl get deployments command
+// if ns is empty, then all namespaces are used
+func RetrieveDeployments(nsFilter string, podList []Pod) []Deployment {
+	cmd := "kubectl get deployments --all-namespaces --no-headers"
+	out, err := exec.Command("bash", "-c", cmd).CombinedOutput()
+	if err != nil {
+		log.Fatalf("Failed to execute command: %s", cmd)
+	}
+	data := string(out)
+
+	podsMap := make(map[string][]Pod)
+	for _, pod := range podList {
+		deployment := pod.GetDeploymentdKey()
+		if podsMap[deployment] == nil {
+			podsMap[deployment] = []Pod{pod}
+		} else {
+			podsMap[deployment] = append(podsMap[deployment], pod)
+		}
+	}
+	return buildDeploymentList(data, podsMap, nsFilter)
+}
+
+func buildDeploymentList(data string, podsMap map[string][]Pod, nsFilter string) []Deployment {
+	var deployments []Deployment
+	scanner := bufio.NewScanner(strings.NewReader(data))
+	for scanner.Scan() {
+		reg, _ := regexp.Compile(`(\S*)\s*(\S*)\s*(\S*)\/(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*`)
+		txt := scanner.Text()
+		groups := reg.FindStringSubmatch(txt)
+		mamespace := groups[1]
+		if nsFilter == "" || nsFilter == mamespace {
+			replicasReady, _ := strconv.Atoi(groups[3])
+			replicasExpected, _ := strconv.Atoi(groups[4])
+			upToDate, _ := strconv.Atoi(groups[5])
+			avaliable, _ := strconv.Atoi(groups[6])
+			deployment := Deployment{
+				Namespace:        mamespace,
+				Name:             groups[2],
+				Replicas:         replicasReady,
+				ReplicasExpected: replicasExpected,
+				UpToDate:         upToDate,
+				Avaliable:        avaliable,
+				Age:              groups[7],
+			}
+			deployment.Pods = podsMap[deployment.GetDeploymentKey()]
+			deployments = append(deployments, deployment)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+	return deployments
+}
