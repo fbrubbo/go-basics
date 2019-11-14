@@ -177,7 +177,7 @@ func printHpaTab(hpaList []Hpa, csvFilePrefix string, debug bool) {
 		writer := csv.NewWriter(file)
 		defer writer.Flush()
 
-		header := []string{"Namespace", "Hpa Name", "Reference", "Hpa Use", "Hpa Target", "Min Replicas", "Max Replicas", "Actual Replicas", "# Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)"}
+		header := []string{"Namespace", "Hpa Name", "Reference", "Hpa Use(%)", "Hpa Target(%)", "Min Replicas", "Max Replicas", "Actual Replicas", "# Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)"}
 		err = writer.Write(header)
 		if err != nil {
 			log.Fatal(err)
