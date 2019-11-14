@@ -45,7 +45,13 @@ func RetrieveDeployments(nsFilter string, podList []Pod) []Deployment {
 		log.Fatalf("Failed to execute command: %s", cmd)
 	}
 	data := string(out)
+	return buildDeploymentList(data, nsFilter, podList)
+}
 
+const patternOld = `(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*`
+const pattern = `(\S*)\s*(\S*)\s*(\S*)\/(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*`
+
+func buildDeploymentList(data string, nsFilter string, podList []Pod) []Deployment {
 	podsMap := make(map[string][]Pod)
 	for _, pod := range podList {
 		deployment := pod.GetDeploymentdKey()
@@ -55,15 +61,17 @@ func RetrieveDeployments(nsFilter string, podList []Pod) []Deployment {
 			podsMap[deployment] = append(podsMap[deployment], pod)
 		}
 	}
-	return buildDeploymentList(data, podsMap, nsFilter)
-}
 
-func buildDeploymentList(data string, podsMap map[string][]Pod, nsFilter string) []Deployment {
 	var deployments []Deployment
 	scanner := bufio.NewScanner(strings.NewReader(data))
 	for scanner.Scan() {
-		reg, _ := regexp.Compile(`(\S*)\s*(\S*)\s*(\S*)\/(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*`)
 		txt := scanner.Text()
+		var reg *regexp.Regexp
+		if match, _ := regexp.MatchString(pattern, txt); match {
+			reg, _ = regexp.Compile(pattern)
+		} else {
+			reg, _ = regexp.Compile(patternOld)
+		}
 		groups := reg.FindStringSubmatch(txt)
 		mamespace := groups[1]
 		if nsFilter == "" || nsFilter == mamespace {

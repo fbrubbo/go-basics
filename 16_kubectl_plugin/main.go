@@ -20,7 +20,7 @@ func main() {
 	n := flag.String("n", "", "Filter by namespace name (default:empty means all namespaces)")
 	v := flag.Bool("v", false, "Show the plugin version")
 	show := flag.String("print", "all", "Define what will be printed. Valid values all|pods|hpas|nodes ")
-	csv := flag.Bool("csv-output", false, "Save the result to files with format 'kubectl-snapshot-<date>-<pods|hpas|nohpa|nodes|all>.csv'")
+	csv := flag.String("csv-output", "", "Save the result to files with format 'kubectl-snapshot-<date>-<csv-output>-<pods|hpas|nohpa|nodes|all>.csv'")
 	debug := flag.Bool("debug", false, "Show debug info")
 	flag.Parse()
 	printFlags(*p, *d, *n, *v, *show, *csv, *debug)
@@ -32,9 +32,9 @@ func main() {
 		}
 	}
 	csvFilePrefix := ""
-	if *csv {
+	if *csv != "" {
 		now := time.Now()
-		csvFilePrefix = now.Format("kubectl-snapshot-2006-01-02-1504")
+		csvFilePrefix = now.Format(fmt.Sprintf("kubectl-snapshot-2006-01-02-1504-%s", *csv))
 	}
 
 	// Pods with resource usage (top) ..
@@ -92,7 +92,7 @@ func main() {
 
 }
 
-func printFlags(p string, d string, n string, v bool, show string, csv bool, debug bool) {
+func printFlags(p string, d string, n string, v bool, show string, csv string, debug bool) {
 	if debug {
 		fmt.Println("---------------------------------------------")
 		fmt.Println("[debug] FLAGS: ")

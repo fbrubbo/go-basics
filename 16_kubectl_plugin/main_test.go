@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 )
@@ -9,6 +10,11 @@ import (
 func TestDateFormat(t *testing.T) {
 	now := time.Now()
 	fmt.Println(now.Format("kubectl-snapshot-2006-01-02-1504-pods.csv"))
+}
+
+func TestRegexp(t *testing.T) {
+	match, _ := regexp.MatchString("p([a-z]+)ch", "peach")
+	fmt.Println(match)
 }
 
 var data = [][]string{{"Line1", "Hello Readers of"}, {"Line2", "golangcode.com"}}
