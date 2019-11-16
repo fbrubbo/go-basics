@@ -71,6 +71,10 @@ func main() {
 		}
 	}
 
+	// Nodes, use podList to confirm resource usgage ..
+	nodeList := RetrieveNodes(podList)
+	// TODO: filter
+
 	// Print standard io or send to csv files ..
 	switch *show {
 	case "pod":
@@ -82,12 +86,12 @@ func main() {
 		printNoHpaTab(deploymentWithoutHpa, csvFilePrefix, *debug)
 	case "node":
 	case "nodes":
-		printNodesTab(podList, csvFilePrefix, *debug)
+		printNodesTab(nodeList, csvFilePrefix, *debug)
 	default:
 		printPodsTab(podList, csvFilePrefix, *debug)
 		printHpaTab(hpaList, csvFilePrefix, *debug)
 		printNoHpaTab(deploymentWithoutHpa, csvFilePrefix, *debug)
-		printNodesTab(podList, csvFilePrefix, *debug)
+		printNodesTab(nodeList, csvFilePrefix, *debug)
 	}
 
 }
@@ -240,29 +244,24 @@ func printNoHpaTab(deploymentWithoutHpa []Deployment, csvFilePrefix string, debu
 	}
 }
 
-func printNodesTab(podList []Pod, csvFilePrefix string, debug bool) {
-	result := Wrapper{Pods: podList}
-	podsInNodes := make(map[string][]Pod)
-	for _, pod := range result.Pods {
-		nodeName := pod.Spec.NodeName
-		if pods, ok := podsInNodes[nodeName]; ok {
-			podsInNodes[nodeName] = append(pods, pod)
-		} else {
-			podsInNodes[nodeName] = []Pod{pod}
-		}
-	}
-
+func printNodesTab(nodeList []Node, csvFilePrefix string, debug bool) {
+	allPods := Wrapper{Pods: []Pod{}}
 	if csvFilePrefix == "" || debug {
 		fmt.Println("\n\nNODEs SNAPSHOT:")
-		formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
-		formatValues := "%v\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\n"
+		formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
+		formatValues := "%v\t%v\t%v\t%vm\t%vMi\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\n"
 		tw := tabwriter.NewWriter(os.Stdout, 0, 1, 2, ' ', tabwriter.TabIndent)
-		fmt.Fprintf(tw, formatHeader, "Node", "Num Pods In Node", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)")
-		fmt.Fprintf(tw, formatHeader, "----", "----------------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
+		fmt.Fprintf(tw, formatHeader, "Node", "Node Pool", "Allocatable Pods", "Allocatable CPU (m)", "Allocatable Memory (Mi)", "Actual Num Pods", "Requests CPU (m)", "TOP CPU (m)", "Usage Requests CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Requests Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)")
+		fmt.Fprintf(tw, formatHeader, "----", "---------", "----------------", "-------------------", "-----------------------", "---------------", "----------------", "-----------", "----------------------", "--------------------", "---------------", "-------------------------", "--------------", "-------------------")
 		min := 999
 		max := 0
 		total := 0
-		for nodeName, pods := range podsInNodes {
+		allocatableMilliCPU := 0
+		allocatableMiMemory := 0
+		for _, node := range nodeList {
+			nodeName := node.GetName()
+			pods := node.Pods
+			allPods.Pods = append(allPods.Pods, pods...)
 			nPods := len(pods)
 			total += nPods
 			if nPods > max {
@@ -271,25 +270,29 @@ func printNodesTab(podList []Pod, csvFilePrefix string, debug bool) {
 			if min > nPods {
 				min = nPods
 			}
+			allocatableMilliCPU += node.GetAllocatableMilliCPU()
+			allocatableMiMemory += node.GetAllocatableMiMemory()
 			w := Wrapper{Pods: pods}
-			fmt.Fprintf(tw, formatValues, nodeName, nPods, w.GetRequestsMilliCPU(), w.GetTopMilliCPU(), w.GetUsageCPU(), w.GetRequestsMiMemory(), w.GetTopMiMemory(), w.GetUsageMemory(), w.GetLimitsMilliCPU(), w.GetLimitsMiMemory())
+			fmt.Fprintf(tw, formatValues, nodeName, node.GetNodepool(), node.GetAllocatablePods(), node.GetAllocatableMilliCPU(), node.GetAllocatableMiMemory(), nPods, w.GetRequestsMilliCPU(), w.GetTopMilliCPU(), w.GetUsageCPU(), w.GetRequestsMiMemory(), w.GetTopMiMemory(), w.GetUsageMemory(), w.GetLimitsMilliCPU(), w.GetLimitsMiMemory())
 		}
 		avg := 0
-		if len(podsInNodes) > 0 {
-			avg = total / len(podsInNodes)
+		if len(nodeList) > 0 {
+			avg = total / len(nodeList)
 		} else {
 			min = 0
 		}
-		fmt.Fprintf(tw, formatHeader, " ", "----------------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------")
-		summary := fmt.Sprintf("Min:%d/Max:%d/Avg:%d", min, max, avg)
-		fmt.Fprintf(tw, formatValues, " ", summary, result.GetRequestsMilliCPU(), result.GetTopMilliCPU(), result.GetUsageCPU(), result.GetRequestsMiMemory(), result.GetTopMiMemory(), result.GetUsageMemory(), result.GetLimitsMilliCPU(), result.GetLimitsMiMemory())
+		fmt.Fprintf(tw, formatHeader, " ", " ", " ", "-------------------", "-----------------------", "----------------", "----------------", "-----------", "----------------------", "--------------------", "---------------", "-------------------------", "--------------", "-------------------")
+		summaryPods := fmt.Sprintf("Min:%d/Max:%d/Avg:%d", min, max, avg)
+		fmt.Fprintf(tw, formatValues, " ", " ", " ", allocatableMilliCPU, allocatableMiMemory, summaryPods, allPods.GetRequestsMilliCPU(), allPods.GetTopMilliCPU(), allPods.GetUsageCPU(), allPods.GetRequestsMiMemory(), allPods.GetTopMiMemory(), allPods.GetUsageMemory(), allPods.GetLimitsMilliCPU(), allPods.GetLimitsMiMemory())
 		tw.Flush()
 
 		if debug {
 			fmt.Println()
 			fmt.Println("---------------------------------------------")
 			fmt.Println("[debug] PODS IN EACH NODE: ")
-			for nodeName, pods := range podsInNodes {
+			for _, node := range nodeList {
+				nodeName := node.GetName()
+				pods := node.Pods
 				fmt.Printf(" - %s\n   [ ", nodeName)
 				for _, pod := range pods {
 					fmt.Printf("%s   ", pod.GetPodKey())
@@ -310,15 +313,17 @@ func printNodesTab(podList []Pod, csvFilePrefix string, debug bool) {
 		writer := csv.NewWriter(file)
 		defer writer.Flush()
 
-		header := []string{"Node", "Num Pods In Node", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)"}
+		header := []string{"Node", "Node Pool", "Allocatable Pods", "Allocatable CPU (m)", "Allocatable Memory (Mi)", "Actual Num Pods", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)"}
 		err = writer.Write(header)
 		if err != nil {
 			log.Fatal(err)
 		}
-		for nodeName, pods := range podsInNodes {
+		for _, node := range nodeList {
+			nodeName := node.GetName()
+			pods := node.Pods
 			nPods := len(pods)
 			w := Wrapper{Pods: pods}
-			line := []string{nodeName, strconv.Itoa(nPods), strconv.Itoa(w.GetRequestsMilliCPU()), strconv.Itoa(w.GetTopMilliCPU()), fmt.Sprintf("%.2f", w.GetUsageCPU()), strconv.Itoa(w.GetRequestsMiMemory()), strconv.Itoa(w.GetTopMiMemory()), fmt.Sprintf("%.2f", w.GetUsageMemory()), strconv.Itoa(w.GetLimitsMilliCPU()), strconv.Itoa(w.GetLimitsMiMemory())}
+			line := []string{nodeName, node.GetNodepool(), strconv.Itoa(node.GetAllocatablePods()), strconv.Itoa(node.GetAllocatableMilliCPU()), strconv.Itoa(node.GetAllocatableMiMemory()), strconv.Itoa(nPods), strconv.Itoa(w.GetRequestsMilliCPU()), strconv.Itoa(w.GetTopMilliCPU()), fmt.Sprintf("%.2f", w.GetUsageCPU()), strconv.Itoa(w.GetRequestsMiMemory()), strconv.Itoa(w.GetTopMiMemory()), fmt.Sprintf("%.2f", w.GetUsageMemory()), strconv.Itoa(w.GetLimitsMilliCPU()), strconv.Itoa(w.GetLimitsMiMemory())}
 			err := writer.Write(line)
 			if err != nil {
 				log.Fatal(err)

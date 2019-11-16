@@ -4,11 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
 	"os/exec"
 	"regexp"
-	"strconv"
-	"strings"
 )
 
 // PodList struct
@@ -53,49 +50,12 @@ type Resource struct {
 
 // GetMilliCPU returns the CPU in MilliCPU
 func (r Resource) GetMilliCPU() int {
-	if strings.Contains(r.CPU, "m") {
-		str := strings.ReplaceAll(r.CPU, "m", "")
-		milli, _ := strconv.Atoi(str)
-		return milli
-	}
-	cpu, _ := strconv.ParseFloat(r.CPU, 64)
-	milli := (int)(cpu * 1000)
-	return milli
+	return String2MilliCPU(r.CPU)
 }
 
 // GetMiMemory returns the memory in Mi
 func (r Resource) GetMiMemory() int {
-	reg, _ := regexp.Compile(`(\d*)(.*)`)
-	groups := reg.FindStringSubmatch(r.Memory)
-	memory, _ := strconv.Atoi(groups[1])
-	suffix := groups[2]
-
-	switch suffix {
-	case "G":
-		// http://extraconversion.com/data-storage-conversion-table/gigabytes-to-mebibytes.html
-		return int(math.Round(float64(memory) * 953.67431640625))
-	case "Gi":
-		// http://extraconversion.com/data-storage-conversion-table/gibibytes-to-mebibytes.html
-		return memory * 1024
-	case "M":
-		// http://extraconversion.com/data-storage-conversion-table/megabytes-to-mebibytes.html
-		return int(math.Round(float64(memory) * 0.9537))
-	case "Mi":
-		return memory
-	default:
-		// http://extraconversion.com/data-storage-conversion-table/bytes-to-mebibytes.html
-		return int(math.Round(float64(memory) * 9.53674E-7))
-	}
-
-	/*
-		TODO:
-
-		Limits and requests for memory are measured in bytes.
-		You can express memory as a plain integer or as a fixed-point integer using one of these suffixes: E, P, T, G, M, K.
-		You can also use the power-of-two equivalents: Ei, Pi, Ti, Gi, Mi, Ki. For example, the following represent roughly the same value:
-
-		128974848, 129e6, 129M, 123Mi
-	*/
+	return String2MiMemory(r.Memory)
 }
 
 // GetPodKey returns <namespace>-<pod name>
@@ -248,9 +208,9 @@ func buildKubectlCmd(ns string) string {
 
 func buildPodList(str string) PodList {
 	pods := PodList{}
-	err2 := json.Unmarshal([]byte(str), &pods)
-	if err2 != nil {
-		fmt.Println(err2.Error())
+	err := json.Unmarshal([]byte(str), &pods)
+	if err != nil {
+		log.Fatalf("%+v", err)
 	}
 	return pods
 }
