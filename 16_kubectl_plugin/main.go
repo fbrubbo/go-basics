@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const version = "0.1.0"
+const version = "0.1.1"
 
 // TODO: sort-by ? How to handle the below scenarios?
 func main() {
@@ -313,7 +313,7 @@ func printNodesTab(nodeList []Node, csvFilePrefix string, debug bool) {
 		writer := csv.NewWriter(file)
 		defer writer.Flush()
 
-		header := []string{"Node", "Node Pool", "Allocatable Pods", "Allocatable CPU (m)", "Allocatable Memory (Mi)", "Actual Num Pods", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)"}
+		header := []string{"Node", "Node Pool", "Allocatable Pods", "Allocatable CPU (m)", "Allocatable Memory (Mi)", "Actual Num Pods", "Requests CPU (m)", "TOP CPU (m)", "Usage Requests CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Requests Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)"}
 		err = writer.Write(header)
 		if err != nil {
 			log.Fatal(err)

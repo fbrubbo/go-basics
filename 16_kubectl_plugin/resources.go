@@ -17,7 +17,10 @@ type PodList struct {
 type Pod struct {
 	Metadata Metadata
 	Spec     Spec
-	Top      Top
+	Status   struct {
+		Phase string
+	}
+	Top Top
 }
 
 // Metadata struct
@@ -173,7 +176,7 @@ func (p Pod) GetLimitsMiMemory() int {
 	return total
 }
 
-// RetrievePods executes kubectl get pods command
+// RetrievePods executes kubectl get pods command and return only status.phase == "Running" pods
 // if ns is empty, then all namespaces are used
 func RetrievePods(ns string) []Pod {
 	cmd := buildKubectlCmd(ns)
@@ -183,17 +186,19 @@ func RetrievePods(ns string) []Pod {
 	}
 	json := string(out)
 	pods := buildPodList(json).Items
-	return enrichPodsWithTopInfo(pods, ns)
+	return enrichPodsWithTopInfoAndFilterRunning(pods, ns)
 }
 
-func enrichPodsWithTopInfo(pods []Pod, ns string) []Pod {
+func enrichPodsWithTopInfoAndFilterRunning(pods []Pod, ns string) []Pod {
 	var podList []Pod
 	topMap := RetrieveTopMap(ns)
 	for _, pod := range pods {
-		if top, ok := topMap[pod.GetPodKey()]; ok {
-			pod.Top = top
+		if pod.Status.Phase == "Running" {
+			if top, ok := topMap[pod.GetPodKey()]; ok {
+				pod.Top = top
+			}
+			podList = append(podList, pod)
 		}
-		podList = append(podList, pod)
 	}
 	return podList
 }

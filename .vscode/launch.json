@@ -15,7 +15,7 @@
             //"args": ["-p", "checkoutservice-b768cb558-rq72c", "-n", "default"]
             //"args": ["-n", "config-management-system"]
             //"args": ["-debug"]
-            "args": ["-csv-output", "-debug"]
+            //"args": ["-csv-output", "-debug"]
         }
     ]
 }
