@@ -6,6 +6,7 @@ import (
 	"log"
 	"os/exec"
 	"regexp"
+	"time"
 )
 
 // PodList struct
@@ -18,9 +19,20 @@ type Pod struct {
 	Metadata Metadata
 	Spec     Spec
 	Status   struct {
+		Conditions        []Condition `json:"conditions"`
+		ContainerStatuses []struct {
+			RestartCount int `json:"restartCount"`
+		} `json:"containerStatuses"`
 		Phase string
 	}
 	Top Top
+}
+
+// Condition struct
+type Condition struct {
+	LastTransitionTime time.Time `json:"lastTransitionTime"`
+	Status             string    `json:"status"`
+	Type               string    `json:"type"`
 }
 
 // Metadata struct
@@ -74,6 +86,31 @@ func (p Pod) GetDeploymentdKey() string {
 // GetReplicaSetKey returns <namespace>-<pod name>
 func (p Pod) GetReplicaSetKey() string {
 	return p.Metadata.Namespace + "|" + p.GetReplicaSetName()
+}
+
+// GetStartupDuration returns the startup duration. If pod has restrats, we can not use this method to get startup duration so we return 0
+func (p Pod) GetStartupDuration() time.Duration {
+	restartCount := 0
+	for _, cs := range p.Status.ContainerStatuses {
+		restartCount = restartCount + cs.RestartCount
+	}
+
+	ready := p.findStatusCondition(func(c Condition) bool { return c.Status == "True" && c.Type == "Ready" })
+	podScheduled := p.findStatusCondition(func(c Condition) bool { return c.Status == "True" && c.Type == "PodScheduled" })
+	if restartCount > 0 || ready.Status == "NA" || podScheduled.Status == "NA" {
+		return time.Duration(0)
+	}
+	diff := ready.LastTransitionTime.Sub(podScheduled.LastTransitionTime)
+	return diff
+}
+
+func (p Pod) findStatusCondition(test func(Condition) bool) Condition {
+	for _, c := range p.Status.Conditions {
+		if test(c) {
+			return c
+		}
+	}
+	return Condition{Status: "NA"}
 }
 
 //senninha-quotation-redis-slave-0

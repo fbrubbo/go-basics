@@ -68,6 +68,34 @@ func TestGetDeploymentName(t *testing.T) {
 	}
 }
 
+func TestStartupDuration(t *testing.T) {
+	b, err := ioutil.ReadFile("test-data/one-pod.json")
+	if err != nil {
+		fmt.Print(err)
+	}
+	str := string(b)
+	pr := buildPodList(str).Items[0]
+
+	expected := 42.
+	if result := pr.GetStartupDuration().Seconds(); result != expected {
+		t.Fatalf("Test failed! %f but expected %f", result, expected)
+	}
+}
+
+func TestStartupMissingDurationInfo(t *testing.T) {
+	b, err := ioutil.ReadFile("test-data/one-pod-missing-duration-info.json")
+	if err != nil {
+		fmt.Print(err)
+	}
+	str := string(b)
+	pr := buildPodList(str).Items[0]
+
+	expected := 0.
+	if result := pr.GetStartupDuration().Seconds(); result != expected {
+		t.Fatalf("Test failed! %f but expected %f", result, expected)
+	}
+}
+
 func TestBuildOnePod(t *testing.T) {
 	b, err := ioutil.ReadFile("test-data/one-pod.json")
 	if err != nil {
