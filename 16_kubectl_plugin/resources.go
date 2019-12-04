@@ -88,7 +88,7 @@ func (p Pod) GetReplicaSetKey() string {
 	return p.Metadata.Namespace + "|" + p.GetReplicaSetName()
 }
 
-// GetStartupDuration returns the startup duration. If pod has restrats, we can not use this method to get startup duration so we return 0
+// GetStartupDuration returns the best effort for geting startup time (ready - schedule), 0 otherwise
 func (p Pod) GetStartupDuration() time.Duration {
 	restartCount := 0
 	for _, cs := range p.Status.ContainerStatuses {
@@ -98,9 +98,14 @@ func (p Pod) GetStartupDuration() time.Duration {
 	ready := p.findStatusCondition(func(c Condition) bool { return c.Status == "True" && c.Type == "Ready" })
 	podScheduled := p.findStatusCondition(func(c Condition) bool { return c.Status == "True" && c.Type == "PodScheduled" })
 	if restartCount > 0 || ready.Status == "NA" || podScheduled.Status == "NA" {
+		// if pod has restarts or no info in any of the containers statuses, that means the timestamps in the statuses do not represent startup duration
 		return time.Duration(0)
 	}
 	diff := ready.LastTransitionTime.Sub(podScheduled.LastTransitionTime)
+	if diff > time.Hour {
+		// if diff is too big (guessing 1+ hour), that probably means the timestamps in the statuses do not represent startup duration. Eg, the pod may became unhealty and then healty again
+		return time.Duration(0)
+	}
 	return diff
 }
 
