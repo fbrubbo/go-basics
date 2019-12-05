@@ -39,6 +39,7 @@ type Condition struct {
 type Metadata struct {
 	Name            string
 	Namespace       string
+	Labels          map[string]string
 	OwnerReferences []struct {
 		Kind string
 		Name string

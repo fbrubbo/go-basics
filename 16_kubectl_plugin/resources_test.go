@@ -136,6 +136,10 @@ func TestBuildOnePod(t *testing.T) {
 	if result := pr.GetLimitsMiMemory(); result != expected {
 		t.Fatalf("Test failed! %d but expected %d", result, expected)
 	}
+	ex = "shippingservice"
+	if result := pr.Metadata.Labels["app"]; result != ex {
+		t.Fatalf("Test failed! %s but expected %s", result, ex)
+	}
 }
 
 func TestBuildManyPods(t *testing.T) {

@@ -11,7 +11,8 @@ import (
 	"time"
 )
 
-const version = "0.1.2"
+const version = "0.1.3"
+const versionDesciption = "Added Pod Disruption Budget"
 
 // TODO: sort-by ? How to handle the below scenarios?
 func main() {
@@ -26,7 +27,7 @@ func main() {
 	printFlags(*p, *d, *n, *v, *show, *csv, *debug)
 
 	if *v || *debug {
-		fmt.Println("Plugin Version: ", version)
+		fmt.Printf("Plugin Version: %s (%s)\n", version, versionDesciption)
 		if *v {
 			os.Exit(0)
 		}
@@ -156,18 +157,18 @@ func printPodsTab(podList []Pod, csvFilePrefix string, debug bool) {
 
 func printHpaTab(hpaList []Hpa, csvFilePrefix string, debug bool) {
 	if csvFilePrefix == "" || debug {
-		formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
-		formatValues := "%v\t%v\t%v\t%v\t%v\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\t%v\n"
+		formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
+		formatValues := "%v\t%v\t%v\t%v\t%v\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\t%v\t%v\t%v\n"
 		fmt.Println("\nHPAs SNAPSHOT:")
 		w := tabwriter.NewWriter(os.Stdout, 0, 1, 2, ' ', tabwriter.TabIndent)
-		fmt.Fprintf(w, formatHeader, "Namespace", "Hpa Name", "Reference", "Target", "Replicas (Min/Max/Actual)", "# Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)", "Pod Startup Duration (AVG)")
-		fmt.Fprintf(w, formatHeader, "---------", "--------", "---------", "------", "-------------------------", "---------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------", "--------------------------")
+		fmt.Fprintf(w, formatHeader, "Namespace", "Hpa Name", "Reference", "Target", "Replicas (Min/Max/Actual)", "# Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)", "Pod Startup Duration (AVG)", "PDB MinAvailable", "PDB MaxUnavailable")
+		fmt.Fprintf(w, formatHeader, "---------", "--------", "---------", "------", "-------------------------", "---------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------", "--------------------------", "----------------", "------------------")
 		for _, hpa := range hpaList {
 			wp := Wrapper{Pods: hpa.Pods}
 			replicas := fmt.Sprintf("%d/%d/%d", hpa.MinPods, hpa.MaxPods, hpa.Replicas)
-			fmt.Fprintf(w, formatValues, hpa.Namespace, hpa.Name, hpa.GetReference(), hpa.GetUsageAndTarget(), replicas, len(hpa.Pods), wp.GetRequestsMilliCPU(), wp.GetTopMilliCPU(), wp.GetUsageCPU(), wp.GetRequestsMiMemory(), wp.GetTopMiMemory(), wp.GetUsageMemory(), wp.GetLimitsMilliCPU(), wp.GetLimitsMiMemory(), wp.GetAvgStartupDuration())
+			fmt.Fprintf(w, formatValues, hpa.Namespace, hpa.Name, hpa.GetReference(), hpa.GetUsageAndTarget(), replicas, len(hpa.Pods), wp.GetRequestsMilliCPU(), wp.GetTopMilliCPU(), wp.GetUsageCPU(), wp.GetRequestsMiMemory(), wp.GetTopMiMemory(), wp.GetUsageMemory(), wp.GetLimitsMilliCPU(), wp.GetLimitsMiMemory(), wp.GetAvgStartupDuration(), hpa.Pdb.Spec.MinAvailable, hpa.Pdb.Spec.MaxUnavailable)
 		}
-		fmt.Fprintf(w, formatHeader, " ", " ", " ", "------", "-------------------------", "---------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------", "--------------------------")
+		fmt.Fprintf(w, formatHeader, " ", " ", " ", "------", "-------------------------", "---------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------", "--------------------------", "----------------", "------------------")
 		w.Flush()
 	}
 
@@ -181,7 +182,7 @@ func printHpaTab(hpaList []Hpa, csvFilePrefix string, debug bool) {
 		writer := csv.NewWriter(file)
 		defer writer.Flush()
 
-		header := []string{"Namespace", "Hpa Name", "Reference", "Hpa Use(%)", "Hpa Target(%)", "Min Replicas", "Max Replicas", "Actual Replicas", "# Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)", "Pod Startup Duration (AVG)"}
+		header := []string{"Namespace", "Hpa Name", "Reference", "Hpa Use(%)", "Hpa Target(%)", "Min Replicas", "Max Replicas", "Actual Replicas", "# Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)", "Pod Startup Duration (AVG)", "PDB MinAvailable", "PDB MaxUnavailable"}
 		err = writer.Write(header)
 		if err != nil {
 			log.Fatal(err)
@@ -192,7 +193,7 @@ func printHpaTab(hpaList []Hpa, csvFilePrefix string, debug bool) {
 			if hpa.UsageCPU != -1 {
 				hpaUse = strconv.Itoa(hpa.UsageCPU)
 			}
-			line := []string{hpa.Namespace, hpa.Name, hpa.GetReference(), hpaUse, strconv.Itoa(hpa.Target), strconv.Itoa(hpa.MinPods), strconv.Itoa(hpa.MaxPods), strconv.Itoa(hpa.Replicas), strconv.Itoa(len(hpa.Pods)), strconv.Itoa(wp.GetRequestsMilliCPU()), strconv.Itoa(wp.GetTopMilliCPU()), fmt.Sprintf("%.2f", wp.GetUsageCPU()), strconv.Itoa(wp.GetRequestsMiMemory()), strconv.Itoa(wp.GetTopMiMemory()), fmt.Sprintf("%.2f", wp.GetUsageMemory()), strconv.Itoa(wp.GetLimitsMilliCPU()), strconv.Itoa(wp.GetLimitsMiMemory()), fmt.Sprintf("%s", wp.GetAvgStartupDuration())}
+			line := []string{hpa.Namespace, hpa.Name, hpa.GetReference(), hpaUse, strconv.Itoa(hpa.Target), strconv.Itoa(hpa.MinPods), strconv.Itoa(hpa.MaxPods), strconv.Itoa(hpa.Replicas), strconv.Itoa(len(hpa.Pods)), strconv.Itoa(wp.GetRequestsMilliCPU()), strconv.Itoa(wp.GetTopMilliCPU()), fmt.Sprintf("%.2f", wp.GetUsageCPU()), strconv.Itoa(wp.GetRequestsMiMemory()), strconv.Itoa(wp.GetTopMiMemory()), fmt.Sprintf("%.2f", wp.GetUsageMemory()), strconv.Itoa(wp.GetLimitsMilliCPU()), strconv.Itoa(wp.GetLimitsMiMemory()), fmt.Sprintf("%s", wp.GetAvgStartupDuration()), strconv.Itoa(hpa.Pdb.Spec.MinAvailable), strconv.Itoa(hpa.Pdb.Spec.MaxUnavailable)}
 			err := writer.Write(line)
 			if err != nil {
 				log.Fatal(err)
@@ -203,18 +204,18 @@ func printHpaTab(hpaList []Hpa, csvFilePrefix string, debug bool) {
 
 func printNoHpaTab(deploymentWithoutHpa []Deployment, csvFilePrefix string, debug bool) {
 	if csvFilePrefix == "" || debug {
-		formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
-		formatValues := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\t%v\n"
+		formatHeader := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n"
+		formatValues := "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%vm\t%vm\t%0.2f%%\t%vMi\t%vMi\t%0.2f%%\t%vm\t%vMi\t%v\t%v\t%v\n"
 		fmt.Println("\nNO HPA SNAPSHOT:")
 		w := tabwriter.NewWriter(os.Stdout, 0, 1, 2, ' ', tabwriter.TabIndent)
-		fmt.Fprintf(w, formatHeader, "Namespace", "Deployment Name", "Ready", "Up To Date", "Avaliable", "Age", "#Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)", "Pod Startup Duration (AVG)")
-		fmt.Fprintf(w, formatHeader, "---------", "---------------", "-----", "----------", "---------", "---", "--------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------", "--------------------------")
+		fmt.Fprintf(w, formatHeader, "Namespace", "Deployment Name", "Ready", "Up To Date", "Avaliable", "Age", "#Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)", "Pod Startup Duration (AVG)", "PDB MinAvailable", "PDB MaxUnavailable")
+		fmt.Fprintf(w, formatHeader, "---------", "---------------", "-----", "----------", "---------", "---", "--------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------", "--------------------------", "----------------", "------------------")
 		for _, deploy := range deploymentWithoutHpa {
 			wp := Wrapper{Pods: deploy.Pods}
 			ready := fmt.Sprintf("%d/%d", deploy.Replicas, deploy.ReplicasExpected)
-			fmt.Fprintf(w, formatValues, deploy.Namespace, deploy.Name, ready, deploy.UpToDate, deploy.Avaliable, deploy.Age, len(deploy.Pods), wp.GetRequestsMilliCPU(), wp.GetTopMilliCPU(), wp.GetUsageCPU(), wp.GetRequestsMiMemory(), wp.GetTopMiMemory(), wp.GetUsageMemory(), wp.GetLimitsMilliCPU(), wp.GetLimitsMiMemory(), wp.GetAvgStartupDuration())
+			fmt.Fprintf(w, formatValues, deploy.Namespace, deploy.Name, ready, deploy.UpToDate, deploy.Avaliable, deploy.Age, len(deploy.Pods), wp.GetRequestsMilliCPU(), wp.GetTopMilliCPU(), wp.GetUsageCPU(), wp.GetRequestsMiMemory(), wp.GetTopMiMemory(), wp.GetUsageMemory(), wp.GetLimitsMilliCPU(), wp.GetLimitsMiMemory(), wp.GetAvgStartupDuration(), deploy.Pdb.Spec.MinAvailable, deploy.Pdb.Spec.MaxUnavailable)
 		}
-		fmt.Fprintf(w, formatHeader, " ", " ", "-----", "----------", "---------", "---", "--------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------", "--------------------------")
+		fmt.Fprintf(w, formatHeader, " ", " ", "-----", "----------", "---------", "---", "--------", "----------------", "-----------", "-------------", "--------------------", "---------------", "----------------", "--------------", "-------------------", "--------------------------", "----------------", "------------------")
 		w.Flush()
 	}
 
@@ -228,14 +229,14 @@ func printNoHpaTab(deploymentWithoutHpa []Deployment, csvFilePrefix string, debu
 		writer := csv.NewWriter(file)
 		defer writer.Flush()
 
-		header := []string{"Namespace", "Deployment Name", "Replicas", "Expected Replicas", "Up To Date", "Avaliable", "Age", "#Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)", "Pod Startup Duration (AVG)"}
+		header := []string{"Namespace", "Deployment Name", "Replicas", "Expected Replicas", "Up To Date", "Avaliable", "Age", "#Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)", "Pod Startup Duration (AVG)", "PDB MinAvailable", "PDB MaxUnavailable"}
 		err = writer.Write(header)
 		if err != nil {
 			log.Fatal(err)
 		}
 		for _, deploy := range deploymentWithoutHpa {
 			wp := Wrapper{Pods: deploy.Pods}
-			line := []string{deploy.Namespace, deploy.Name, strconv.Itoa(deploy.Replicas), strconv.Itoa(deploy.ReplicasExpected), strconv.Itoa(deploy.UpToDate), strconv.Itoa(deploy.Avaliable), deploy.Age, strconv.Itoa(len(deploy.Pods)), strconv.Itoa(wp.GetRequestsMilliCPU()), strconv.Itoa(wp.GetTopMilliCPU()), fmt.Sprintf("%.2f", wp.GetUsageCPU()), strconv.Itoa(wp.GetRequestsMiMemory()), strconv.Itoa(wp.GetTopMiMemory()), fmt.Sprintf("%.2f", wp.GetUsageMemory()), strconv.Itoa(wp.GetLimitsMilliCPU()), strconv.Itoa(wp.GetLimitsMiMemory()), fmt.Sprintf("%s", wp.GetAvgStartupDuration())}
+			line := []string{deploy.Namespace, deploy.Name, strconv.Itoa(deploy.Replicas), strconv.Itoa(deploy.ReplicasExpected), strconv.Itoa(deploy.UpToDate), strconv.Itoa(deploy.Avaliable), deploy.Age, strconv.Itoa(len(deploy.Pods)), strconv.Itoa(wp.GetRequestsMilliCPU()), strconv.Itoa(wp.GetTopMilliCPU()), fmt.Sprintf("%.2f", wp.GetUsageCPU()), strconv.Itoa(wp.GetRequestsMiMemory()), strconv.Itoa(wp.GetTopMiMemory()), fmt.Sprintf("%.2f", wp.GetUsageMemory()), strconv.Itoa(wp.GetLimitsMilliCPU()), strconv.Itoa(wp.GetLimitsMiMemory()), fmt.Sprintf("%s", wp.GetAvgStartupDuration()), strconv.Itoa(deploy.Pdb.Spec.MinAvailable), strconv.Itoa(deploy.Pdb.Spec.MaxUnavailable)}
 			err := writer.Write(line)
 			if err != nil {
 				log.Fatal(err)

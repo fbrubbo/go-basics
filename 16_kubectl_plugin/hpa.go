@@ -22,6 +22,7 @@ type Hpa struct {
 	Replicas      int
 	Age           string
 	Pods          []Pod
+	Pdb           Pdb
 }
 
 // GetDeploymentKey should work for most of the cases
@@ -72,7 +73,26 @@ func RetrieveHpas(nsFilter string, podList []Pod) []Hpa {
 	}
 	data := string(out)
 
-	return buildHpaList(data, nsFilter, podList)
+	hpas := buildHpaList(data, nsFilter, podList)
+	hpas = enrichHpaWithPdb(hpas)
+	return hpas
+}
+
+func enrichHpaWithPdb(hpas []Hpa) (ret []Hpa) {
+	//TODO: improve performance in this func
+	pdbs := RetrievePdbs()
+	for _, hpa := range hpas {
+		if len(hpa.Pods) > 0 {
+			for _, pdb := range pdbs {
+				if pdb.match(hpa.Pods[0].Metadata.Labels) {
+					hpa.Pdb = pdb
+					break
+				}
+			}
+		}
+		ret = append(ret, hpa)
+	}
+	return ret
 }
 
 func buildHpaList(data string, nsFilter string, podList []Pod) (hpas []Hpa) {

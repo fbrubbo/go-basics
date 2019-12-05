@@ -19,6 +19,7 @@ type Deployment struct {
 	Avaliable        int
 	Age              string
 	Pods             []Pod
+	Pdb              Pdb
 }
 
 // GetDeploymentKey should work for most of the cases
@@ -45,7 +46,26 @@ func RetrieveDeployments(nsFilter string, podList []Pod) []Deployment {
 		log.Fatalf("Failed to execute command: %s", cmd)
 	}
 	data := string(out)
-	return buildDeploymentList(data, nsFilter, podList)
+	deploys := buildDeploymentList(data, nsFilter, podList)
+	deploys = enrichDeployWithPdb(deploys)
+	return deploys
+}
+
+func enrichDeployWithPdb(deploys []Deployment) (ret []Deployment) {
+	//TODO: improve performance in this func
+	pdbs := RetrievePdbs()
+	for _, deploy := range deploys {
+		if len(deploy.Pods) > 0 {
+			for _, pdb := range pdbs {
+				if pdb.match(deploy.Pods[0].Metadata.Labels) {
+					deploy.Pdb = pdb
+					break
+				}
+			}
+		}
+		ret = append(ret, deploy)
+	}
+	return ret
 }
 
 const patternOld = `(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*`
