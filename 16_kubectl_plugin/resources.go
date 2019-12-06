@@ -51,6 +51,42 @@ type Spec struct {
 	NodeName   string
 	Containers []struct {
 		Name      string
+		Lifecycle struct {
+			PreStop struct {
+				Exec struct {
+					Command []string
+				}
+				HTTPGet struct {
+					Path string
+				}
+			}
+		}
+		LivenessProbe struct {
+			HTTPGet struct {
+				Path string `json:"path"`
+			} `json:"httpGet,omitempty"`
+			Exec struct {
+				Command []string `json:"command"`
+			} `json:"exec,omitempty"`
+			FailureThreshold    int `json:"failureThreshold"`
+			InitialDelaySeconds int `json:"initialDelaySeconds"`
+			PeriodSeconds       int `json:"periodSeconds"`
+			SuccessThreshold    int `json:"successThreshold"`
+			TimeoutSeconds      int `json:"timeoutSeconds"`
+		} `json:"livenessProbe,omitempty"`
+		ReadinessProbe struct {
+			HTTPGet struct {
+				Path string `json:"path"`
+			} `json:"httpGet,omitempty"`
+			Exec struct {
+				Command []string `json:"command"`
+			} `json:"exec,omitempty"`
+			FailureThreshold    int `json:"failureThreshold"`
+			InitialDelaySeconds int `json:"initialDelaySeconds"`
+			PeriodSeconds       int `json:"periodSeconds"`
+			SuccessThreshold    int `json:"successThreshold"`
+			TimeoutSeconds      int `json:"timeoutSeconds"`
+		} `json:"readinessProbe,omitempty"`
 		Resources struct {
 			Requests Resource
 			Limits   Resource
@@ -121,7 +157,6 @@ func (p Pod) findStatusCondition(test func(Condition) bool) Condition {
 
 //senninha-quotation-redis-slave-0
 // zoidberg-pentaho-report-1572104400-rklgx
-
 const stafulsetPattern = `(.*)-(\d*)`
 const deploymentPattern = `(.*)-([^-]*)-([^-]*)`
 const jobPattern = `(.*)-([^-]*)`
@@ -217,6 +252,42 @@ func (p Pod) GetLimitsMiMemory() int {
 		total += c.Resources.Limits.GetMiMemory()
 	}
 	return total
+}
+
+// CountLivenessProbes ..
+func (p Pod) CountLivenessProbes() string {
+	numContainers := len(p.Spec.Containers)
+	numLiveness := 0
+	for _, c := range p.Spec.Containers {
+		if c.LivenessProbe.HTTPGet.Path != "" || c.LivenessProbe.Exec.Command != nil {
+			numLiveness = numLiveness + 1
+		}
+	}
+	return fmt.Sprintf("%d/%d", numLiveness, numContainers)
+}
+
+// CountReadinessProbes ..
+func (p Pod) CountReadinessProbes() string {
+	numContainers := len(p.Spec.Containers)
+	numReadiness := 0
+	for _, c := range p.Spec.Containers {
+		if c.ReadinessProbe.HTTPGet.Path != "" || c.ReadinessProbe.Exec.Command != nil {
+			numReadiness = numReadiness + 1
+		}
+	}
+	return fmt.Sprintf("%d/%d", numReadiness, numContainers)
+}
+
+// CountLifecyclePreStop ..
+func (p Pod) CountLifecyclePreStop() string {
+	numContainers := len(p.Spec.Containers)
+	preStop := 0
+	for _, c := range p.Spec.Containers {
+		if c.Lifecycle.PreStop.HTTPGet.Path != "" || c.Lifecycle.PreStop.Exec.Command != nil {
+			preStop = preStop + 1
+		}
+	}
+	return fmt.Sprintf("%d/%d", preStop, numContainers)
 }
 
 // RetrievePods executes kubectl get pods command and return only status.phase == "Running" pods

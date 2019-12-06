@@ -63,6 +63,30 @@ func (h Hpa) ContainsPod(pod string) bool {
 	return ok
 }
 
+// CountLivenessProbes ..
+func (h Hpa) CountLivenessProbes() string {
+	if len(h.Pods) > 0 {
+		return h.Pods[0].CountLivenessProbes()
+	}
+	return "N/A"
+}
+
+// CountReadinessProbes ..
+func (h Hpa) CountReadinessProbes() string {
+	if len(h.Pods) > 0 {
+		return h.Pods[0].CountReadinessProbes()
+	}
+	return "N/A"
+}
+
+// CountLifecyclePreStop ..
+func (h Hpa) CountLifecyclePreStop() string {
+	if len(h.Pods) > 0 {
+		return h.Pods[0].CountLifecyclePreStop()
+	}
+	return "N/A"
+}
+
 // RetrieveHpas executes kubectl get hpas command
 // if ns is empty, then all namespaces are used
 func RetrieveHpas(nsFilter string, podList []Pod) []Hpa {

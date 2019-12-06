@@ -37,6 +37,30 @@ func (d Deployment) ContainsPod(pod string) bool {
 	return ok
 }
 
+// CountLivenessProbes ..
+func (d Deployment) CountLivenessProbes() string {
+	if len(d.Pods) > 0 {
+		return d.Pods[0].CountLivenessProbes()
+	}
+	return "N/A"
+}
+
+// CountReadinessProbes ..
+func (d Deployment) CountReadinessProbes() string {
+	if len(d.Pods) > 0 {
+		return d.Pods[0].CountReadinessProbes()
+	}
+	return "N/A"
+}
+
+// CountLifecyclePreStop ..
+func (d Deployment) CountLifecyclePreStop() string {
+	if len(d.Pods) > 0 {
+		return d.Pods[0].CountLifecyclePreStop()
+	}
+	return "N/A"
+}
+
 // RetrieveDeployments executes kubectl get deployments command
 // if ns is empty, then all namespaces are used
 func RetrieveDeployments(nsFilter string, podList []Pod) []Deployment {

@@ -67,6 +67,13 @@
                                 "protocol": "TCP"
                             }
                         ],
+                        "lifecycle": {
+                            "preStop": {
+                                "exec": {
+                                    "command": ["/bin/sh","-c","nginx -s quit; while killall -0 nginx; do sleep 1; done"]
+                                }
+                            }
+                        },
                         "readinessProbe": {
                             "exec": {
                                 "command": [
@@ -201,6 +208,15 @@
                                 "protocol": "TCP"
                             }
                         ],
+                        "lifecycle": {
+                            "preStop": {
+                                "httpGet": {
+                                    "path": "/healthz/ready",
+                                    "port": 15020,
+                                    "scheme": "HTTP"
+                                }
+                            }
+                        },                        
                         "readinessProbe": {
                             "failureThreshold": 30,
                             "httpGet": {
