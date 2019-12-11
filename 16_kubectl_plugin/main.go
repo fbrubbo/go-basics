@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-const version = "0.1.4"
-const versionDesciption = "Count Lifecycle PreStop, Rediness Probe and Liveness Probe"
+const version = "0.1.5"
+const versionDesciption = "Get Lifecycle PreStop, Rediness Probe and Liveness Probe"
 
 // TODO: sort-by ? How to handle the below scenarios?
 func main() {
@@ -182,7 +182,7 @@ func printHpaTab(hpaList []Hpa, csvFilePrefix string, debug bool) {
 		writer := csv.NewWriter(file)
 		defer writer.Flush()
 
-		header := []string{"Namespace", "Hpa Name", "Reference", "Hpa Use(%)", "Hpa Target(%)", "Min Replicas", "Max Replicas", "Actual Replicas", "# Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)", "Pod Startup Duration (AVG)", "PDB MinAvailable", "PDB MaxUnavailable", "Count Liveness Probe", "Count Readiness Probe", "Count Lifecycle PreStop"}
+		header := []string{"Namespace", "Hpa Name", "Reference", "Hpa Use(%)", "Hpa Target(%)", "Min Replicas", "Max Replicas", "Actual Replicas", "# Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)", "Pod Startup Duration (AVG)", "PDB MinAvailable", "PDB MaxUnavailable", "Count Liveness Probe", "Count Readiness Probe", "Count Lifecycle PreStop", "Liveness Probe", "Readiness Probe", "Lifecycle PreStop"}
 		err = writer.Write(header)
 		if err != nil {
 			log.Fatal(err)
@@ -193,7 +193,7 @@ func printHpaTab(hpaList []Hpa, csvFilePrefix string, debug bool) {
 			if hpa.UsageCPU != -1 {
 				hpaUse = strconv.Itoa(hpa.UsageCPU)
 			}
-			line := []string{hpa.Namespace, hpa.Name, hpa.GetReference(), hpaUse, strconv.Itoa(hpa.Target), strconv.Itoa(hpa.MinPods), strconv.Itoa(hpa.MaxPods), strconv.Itoa(hpa.Replicas), strconv.Itoa(len(hpa.Pods)), strconv.Itoa(wp.GetRequestsMilliCPU()), strconv.Itoa(wp.GetTopMilliCPU()), fmt.Sprintf("%.2f", wp.GetUsageCPU()), strconv.Itoa(wp.GetRequestsMiMemory()), strconv.Itoa(wp.GetTopMiMemory()), fmt.Sprintf("%.2f", wp.GetUsageMemory()), strconv.Itoa(wp.GetLimitsMilliCPU()), strconv.Itoa(wp.GetLimitsMiMemory()), fmt.Sprintf("%s", wp.GetAvgStartupDuration()), strconv.Itoa(hpa.Pdb.Spec.MinAvailable), strconv.Itoa(hpa.Pdb.Spec.MaxUnavailable), hpa.CountLivenessProbes(), hpa.CountReadinessProbes(), hpa.CountLifecyclePreStop()}
+			line := []string{hpa.Namespace, hpa.Name, hpa.GetReference(), hpaUse, strconv.Itoa(hpa.Target), strconv.Itoa(hpa.MinPods), strconv.Itoa(hpa.MaxPods), strconv.Itoa(hpa.Replicas), strconv.Itoa(len(hpa.Pods)), strconv.Itoa(wp.GetRequestsMilliCPU()), strconv.Itoa(wp.GetTopMilliCPU()), fmt.Sprintf("%.2f", wp.GetUsageCPU()), strconv.Itoa(wp.GetRequestsMiMemory()), strconv.Itoa(wp.GetTopMiMemory()), fmt.Sprintf("%.2f", wp.GetUsageMemory()), strconv.Itoa(wp.GetLimitsMilliCPU()), strconv.Itoa(wp.GetLimitsMiMemory()), fmt.Sprintf("%s", wp.GetAvgStartupDuration()), strconv.Itoa(hpa.Pdb.Spec.MinAvailable), strconv.Itoa(hpa.Pdb.Spec.MaxUnavailable), hpa.CountLivenessProbes(), hpa.CountReadinessProbes(), hpa.CountLifecyclePreStop(), hpa.GetLivenessProbes(), hpa.GetReadinessProbes(), hpa.GetLifecyclePreStop()}
 			err := writer.Write(line)
 			if err != nil {
 				log.Fatal(err)
@@ -229,14 +229,14 @@ func printNoHpaTab(deploymentWithoutHpa []Deployment, csvFilePrefix string, debu
 		writer := csv.NewWriter(file)
 		defer writer.Flush()
 
-		header := []string{"Namespace", "Deployment Name", "Replicas", "Expected Replicas", "Up To Date", "Avaliable", "Age", "#Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)", "Pod Startup Duration (AVG)", "PDB MinAvailable", "PDB MaxUnavailable", "Count Liveness Probe", "Count Readiness Probe", "Count Lifecycle PreStop"}
+		header := []string{"Namespace", "Deployment Name", "Replicas", "Expected Replicas", "Up To Date", "Avaliable", "Age", "#Pods ->", "Requests CPU (m)", "TOP CPU (m)", "Usage CPU (%)", "Requests Memory (Mi)", "TOP Memory (Mi)", "Usage Memory (%)", "Limits CPU (m)", "Limitis Memory (Mi)", "Pod Startup Duration (AVG)", "PDB MinAvailable", "PDB MaxUnavailable", "Count Liveness Probe", "Count Readiness Probe", "Count Lifecycle PreStop", "Liveness Probe", "Readiness Probe", "Lifecycle PreStop"}
 		err = writer.Write(header)
 		if err != nil {
 			log.Fatal(err)
 		}
 		for _, deploy := range deploymentWithoutHpa {
 			wp := Wrapper{Pods: deploy.Pods}
-			line := []string{deploy.Namespace, deploy.Name, strconv.Itoa(deploy.Replicas), strconv.Itoa(deploy.ReplicasExpected), strconv.Itoa(deploy.UpToDate), strconv.Itoa(deploy.Avaliable), deploy.Age, strconv.Itoa(len(deploy.Pods)), strconv.Itoa(wp.GetRequestsMilliCPU()), strconv.Itoa(wp.GetTopMilliCPU()), fmt.Sprintf("%.2f", wp.GetUsageCPU()), strconv.Itoa(wp.GetRequestsMiMemory()), strconv.Itoa(wp.GetTopMiMemory()), fmt.Sprintf("%.2f", wp.GetUsageMemory()), strconv.Itoa(wp.GetLimitsMilliCPU()), strconv.Itoa(wp.GetLimitsMiMemory()), fmt.Sprintf("%s", wp.GetAvgStartupDuration()), strconv.Itoa(deploy.Pdb.Spec.MinAvailable), strconv.Itoa(deploy.Pdb.Spec.MaxUnavailable), deploy.CountLivenessProbes(), deploy.CountReadinessProbes(), deploy.CountLifecyclePreStop()}
+			line := []string{deploy.Namespace, deploy.Name, strconv.Itoa(deploy.Replicas), strconv.Itoa(deploy.ReplicasExpected), strconv.Itoa(deploy.UpToDate), strconv.Itoa(deploy.Avaliable), deploy.Age, strconv.Itoa(len(deploy.Pods)), strconv.Itoa(wp.GetRequestsMilliCPU()), strconv.Itoa(wp.GetTopMilliCPU()), fmt.Sprintf("%.2f", wp.GetUsageCPU()), strconv.Itoa(wp.GetRequestsMiMemory()), strconv.Itoa(wp.GetTopMiMemory()), fmt.Sprintf("%.2f", wp.GetUsageMemory()), strconv.Itoa(wp.GetLimitsMilliCPU()), strconv.Itoa(wp.GetLimitsMiMemory()), fmt.Sprintf("%s", wp.GetAvgStartupDuration()), strconv.Itoa(deploy.Pdb.Spec.MinAvailable), strconv.Itoa(deploy.Pdb.Spec.MaxUnavailable), deploy.CountLivenessProbes(), deploy.CountReadinessProbes(), deploy.CountLifecyclePreStop(), deploy.GetLivenessProbes(), deploy.GetReadinessProbes(), deploy.GetLifecyclePreStop()}
 			err := writer.Write(line)
 			if err != nil {
 				log.Fatal(err)

@@ -61,6 +61,30 @@ func (d Deployment) CountLifecyclePreStop() string {
 	return "N/A"
 }
 
+// GetLivenessProbes ..
+func (d Deployment) GetLivenessProbes() string {
+	if len(d.Pods) > 0 {
+		return d.Pods[0].GetLivenessProbes()
+	}
+	return "N/A"
+}
+
+// GetReadinessProbes ..
+func (d Deployment) GetReadinessProbes() string {
+	if len(d.Pods) > 0 {
+		return d.Pods[0].GetReadinessProbes()
+	}
+	return "N/A"
+}
+
+// GetLifecyclePreStop ..
+func (d Deployment) GetLifecyclePreStop() string {
+	if len(d.Pods) > 0 {
+		return d.Pods[0].GetLifecyclePreStop()
+	}
+	return "N/A"
+}
+
 // RetrieveDeployments executes kubectl get deployments command
 // if ns is empty, then all namespaces are used
 func RetrieveDeployments(nsFilter string, podList []Pod) []Deployment {

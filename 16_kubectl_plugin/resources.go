@@ -6,6 +6,7 @@ import (
 	"log"
 	"os/exec"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -288,6 +289,61 @@ func (p Pod) CountLifecyclePreStop() string {
 		}
 	}
 	return fmt.Sprintf("%d/%d", preStop, numContainers)
+}
+
+// GetLivenessProbes ..
+func (p Pod) GetLivenessProbes() string {
+	str := ""
+	for _, c := range p.Spec.Containers {
+		if len(str) > 0 {
+			str += "\n"
+		}
+		str += c.Name + " {"
+		if c.LivenessProbe.HTTPGet.Path != "" {
+			str += "HttpGet: " + c.LivenessProbe.HTTPGet.Path
+		} else if c.LivenessProbe.Exec.Command != nil {
+			str += "Exec: " + strings.Join(c.LivenessProbe.Exec.Command, " ")
+		}
+		str += "}"
+	}
+	return str
+}
+
+// GetReadinessProbes ..
+func (p Pod) GetReadinessProbes() string {
+	str := ""
+	for _, c := range p.Spec.Containers {
+		if len(str) > 0 {
+			str += "\n"
+		}
+		str += c.Name + " {"
+		if c.ReadinessProbe.HTTPGet.Path != "" {
+			str += "HttpGet: " + c.ReadinessProbe.HTTPGet.Path
+		} else if c.ReadinessProbe.Exec.Command != nil {
+			str += "Exec: " + strings.Join(c.ReadinessProbe.Exec.Command, " ")
+		}
+		str += "}"
+	}
+	return str
+}
+
+// GetLifecyclePreStop ..
+func (p Pod) GetLifecyclePreStop() string {
+
+	str := ""
+	for _, c := range p.Spec.Containers {
+		if len(str) > 0 {
+			str += "\n"
+		}
+		str += c.Name + " {"
+		if c.Lifecycle.PreStop.HTTPGet.Path != "" {
+			str += "HttpGet: " + c.Lifecycle.PreStop.HTTPGet.Path
+		} else if c.Lifecycle.PreStop.Exec.Command != nil {
+			str += "Exec: " + strings.Join(c.Lifecycle.PreStop.Exec.Command, " ")
+		}
+		str += "}"
+	}
+	return str
 }
 
 // RetrievePods executes kubectl get pods command and return only status.phase == "Running" pods

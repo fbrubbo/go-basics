@@ -87,6 +87,30 @@ func (h Hpa) CountLifecyclePreStop() string {
 	return "N/A"
 }
 
+// GetLivenessProbes ..
+func (h Hpa) GetLivenessProbes() string {
+	if len(h.Pods) > 0 {
+		return h.Pods[0].GetLivenessProbes()
+	}
+	return "N/A"
+}
+
+// GetReadinessProbes ..
+func (h Hpa) GetReadinessProbes() string {
+	if len(h.Pods) > 0 {
+		return h.Pods[0].GetReadinessProbes()
+	}
+	return "N/A"
+}
+
+// GetLifecyclePreStop ..
+func (h Hpa) GetLifecyclePreStop() string {
+	if len(h.Pods) > 0 {
+		return h.Pods[0].GetLifecyclePreStop()
+	}
+	return "N/A"
+}
+
 // RetrieveHpas executes kubectl get hpas command
 // if ns is empty, then all namespaces are used
 func RetrieveHpas(nsFilter string, podList []Pod) []Hpa {
@@ -126,39 +150,41 @@ func buildHpaList(data string, nsFilter string, podList []Pod) (hpas []Hpa) {
 		reg, _ := regexp.Compile(`(\S*)\s*(\S*)\s*(\S*)\/(\S*)\s*((\S*)%|(<unknown>))\/(\S*)%\s*(\S*)\s*(\S*)\s*(\S*)\s*(\S*)\s*`)
 		txt := scanner.Text()
 		groups := reg.FindStringSubmatch(txt)
-		mamespace := groups[1]
-		if nsFilter == "" || nsFilter == mamespace {
-			usageCPU := -1
-			if groups[6] != "" {
-				usageCPU, _ = strconv.Atoi(groups[6])
-			}
+		if len(groups) > 0 {
+			mamespace := groups[1]
+			if nsFilter == "" || nsFilter == mamespace {
+				usageCPU := -1
+				if groups[6] != "" {
+					usageCPU, _ = strconv.Atoi(groups[6])
+				}
 
-			target, _ := strconv.Atoi(groups[8])
-			minPods, _ := strconv.Atoi(groups[9])
-			maxPods, _ := strconv.Atoi(groups[10])
-			replicas, _ := strconv.Atoi(groups[11])
-			hpa := Hpa{
-				Namespace:     mamespace,
-				Name:          groups[2],
-				ReferenceKind: groups[3],
-				ReferenceName: groups[4],
-				UsageCPU:      usageCPU,
-				Target:        target,
-				MinPods:       minPods,
-				MaxPods:       maxPods,
-				Replicas:      replicas,
-				Age:           groups[12],
+				target, _ := strconv.Atoi(groups[8])
+				minPods, _ := strconv.Atoi(groups[9])
+				maxPods, _ := strconv.Atoi(groups[10])
+				replicas, _ := strconv.Atoi(groups[11])
+				hpa := Hpa{
+					Namespace:     mamespace,
+					Name:          groups[2],
+					ReferenceKind: groups[3],
+					ReferenceName: groups[4],
+					UsageCPU:      usageCPU,
+					Target:        target,
+					MinPods:       minPods,
+					MaxPods:       maxPods,
+					Replicas:      replicas,
+					Age:           groups[12],
+				}
+				// enrich hpa with pods
+				key := hpa.Namespace + "|" + hpa.ReferenceName
+				if hpa.ReferenceKind == "Deployment" {
+					hpa.Pods = deploymentMap[key]
+				} else if hpa.ReferenceKind == "ReplicaSet" {
+					hpa.Pods = replicaSetMap[key]
+				} else {
+					// not implemented - return empty pods
+				}
+				hpas = append(hpas, hpa)
 			}
-			// enrich hpa with pods
-			key := hpa.Namespace + "|" + hpa.ReferenceName
-			if hpa.ReferenceKind == "Deployment" {
-				hpa.Pods = deploymentMap[key]
-			} else if hpa.ReferenceKind == "ReplicaSet" {
-				hpa.Pods = replicaSetMap[key]
-			} else {
-				// not implemented - return empty pods
-			}
-			hpas = append(hpas, hpa)
 		}
 	}
 	if err := scanner.Err(); err != nil {
