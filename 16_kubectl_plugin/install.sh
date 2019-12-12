@@ -20,3 +20,13 @@ mkdir -p ~/repos/github/fbrubbo/kubectl-plugins/bin
 cp bin/* ~/repos/github/fbrubbo/kubectl-plugins/bin
 
 
+# TO TEST LOCALLY
+# 1. ./install.sh
+# 2. cd ~/repos/github/fbrubbo/kubectl-plugins
+# 3. git push
+# 4. create new release in github
+# 5. replace all 'uri' and 'sha256' entries in snapshot.yaml
+# 6. kubectl krew install --manifest=snapshot.yaml
+# 7. submite a pull request to https://github.com/kubernetes-sigs/krew-index
+
+
