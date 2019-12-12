@@ -16,14 +16,7 @@ done
 chmod +x ./sh/*
 cp ./sh/* ./bin/
 
-cd bin
-echo 'Tar gziping...'
-rm -rf kubectl-snapshot.tar.gz
-tar -cvzf kubectl-snapshot.tar.gz *
-cd ..
-
-cp bin/kubectl-snapshot.tar.gz ~/repos/github/fbrubbo/kubectl-plugins/
-cp bin/kubectl-snapshot-linux-amd64 ~/repos/github/fbrubbo/kubectl-plugins/kubectl-snapshot
-cp ./sh/* ~/repos/github/fbrubbo/kubectl-plugins/ -f
+mkdir -p ~/repos/github/fbrubbo/kubectl-plugins/bin
+cp bin/* ~/repos/github/fbrubbo/kubectl-plugins/bin
 
 
